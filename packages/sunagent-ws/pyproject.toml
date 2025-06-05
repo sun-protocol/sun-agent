@@ -1,0 +1,60 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sunagent-ws"
+version = "1.0.0"
+license = {file = "LICENSE-CODE"}
+description = "sunagent ws"
+readme = "README.md"
+requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "autogen-core",
+    "autogen-ext",
+    "autogen-agentchat",
+    "pydantic_settings",
+    "flask[async]",
+    "flask_cors",
+    "psycopg==3.1.18",
+    "psycopg-binary==3.1.18",
+    "psycopg-pool==3.2.1",
+    "playwright",
+    "redis"
+]
+
+[dependency-groups]
+dev = [
+]
+
+[tool.hatch.version]
+path = "src/sunagent_ws/version.py"
+
+[project.scripts]
+sunagent_ws = "sunagent_ws.cli:main"
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+include = ["src/**", "tests/*.py"]
+
+[tool.pyright]
+extends = "../../pyproject.toml"
+include = [ "tests"]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+testpaths = ["tests"]
+
+[tool.poe]
+include = "../../shared_tasks.toml"
+
+[tool.poe.tasks]
+test = "pytest -n auto"
+
+
+

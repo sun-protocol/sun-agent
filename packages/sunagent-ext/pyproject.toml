@@ -1,0 +1,54 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sunagent-ext"
+version = "1.0.0"
+license = {file = "LICENSE-CODE"}
+description = "AutoGen extensions library"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "onepassword-sdk>=0.3.0",
+    "autogen-core==0.4.9",
+    "aiohttp"
+]
+
+[project.optional-dependencies]
+langchain = ["langchain_core~= 0.3.3"]
+azure = [
+    "azure-ai-inference>=1.0.0b7",
+    "azure-core",
+    "azure-identity",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sunagent_ext"]
+
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+include = ["src/**", "tests/*.py"]
+
+[tool.pyright]
+extends = "../../pyproject.toml"
+include = ["tests"]
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+testpaths = ["tests"]
+markers = [
+    "grpc",
+]
+
+[tool.poe]
+include = "../../shared_tasks.toml"
+
+[tool.mypy]
+ignore_missing_imports = true
