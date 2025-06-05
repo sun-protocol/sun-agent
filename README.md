@@ -53,12 +53,13 @@ source .venv/bin/activate
 ```bash
 git clone https://github.com/sun-protocol/SunAgent.git
 cd SunAgent
-cp .env.twitter.example .env
 
 uv sync --all-extras
 source .venv/bin/activate
 
-python -m sunagent_app.twitter_app
+cd samples/twitter_robot
+cp .env.twitter.example .env
+python twitter_app.py
 ```
 
 ### Use the Starter token bot
@@ -66,10 +67,10 @@ python -m sunagent_app.twitter_app
 ```bash
 git clone https://github.com/sun-protocol/SunAgent.git
 cd SunAgent
-cp .env.token.example .env
 
 uv sync --all-extras
 source .venv/bin/activate
-
-python -m sunagent_app.token_launch_app
+cd samples/twitter_robot
+cp .env.token.example .env
+python token_launch_app.py
 ```

@@ -17,6 +17,7 @@ classifiers = [
 dependencies = [
   "autogen-core",
   "autogen-ext",
+  "sunagent-ext",
   "autogen-agentchat",
   "autogen",
   "flask[async]",
