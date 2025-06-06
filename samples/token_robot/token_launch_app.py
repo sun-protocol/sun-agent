@@ -31,13 +31,14 @@ from autogen_agentchat.ui import Console
 from autogen_core.models import ModelFamily, UserMessage
 from autogen_ext.cache_store.redis import RedisStore
 from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
+from autogen_ext.tools.mcp import SseServerParams, mcp_server_tools
 from quart import Quart, Response, jsonify, request
 from redis import Redis
 from tweepy import Client as TwitterClient
 from tweepy import StreamResponse, TweepyException
 
-from ._constants import LOGGER_NAME
-from .agents import (
+from sunagent_app._constants import LOGGER_NAME
+from sunagent_app.agents import (
     ContextBuilderAgent,
     ImageGenerateAgent,
     MentionStream,
@@ -45,9 +46,9 @@ from .agents import (
     TweetAnalysisAgent,
     TweetCheckAgent,
 )
-from .memory import get_knowledge_memory, get_sungenx_profile_memory
-from .sunpump_service import SunPumpService
-from .templates.token_templates import (
+from sunagent_app.memory import get_knowledge_memory, get_sungenx_profile_memory
+from sunagent_app.sunpump_service import SunPumpService
+from sunagent_app.templates.token_templates import (
     IntentRecognition,
     PromoteTemplates,
     ShowCaseTemplates,
@@ -59,7 +60,7 @@ from .templates.token_templates import (
     TweetCheckReplyTemplate,
     TweetReplyTemplate,
 )
-from .templates.twitter_templates import (
+from sunagent_app.templates.twitter_templates import (
     BlockPatterns,
     TweetCheckTemplate,
 )
@@ -78,6 +79,19 @@ UTC8 = timezone(timedelta(hours=8))
 languages = ["english" * 9, "chinese"]
 
 
+async def create_tools():
+    url = os.environ.get("PUMP_MCP_URL", "")
+    if not url:
+        return []
+        # raise ValueError("PUMP_MCP_URL is not set")
+    server_params = SseServerParams(
+        url=url,
+        headers={},
+        timeout=30,  # Connection timeout in seconds
+    )
+    return await mcp_server_tools(server_params)
+
+
 class SunAgentSystem:
     def __init__(self) -> None:
         self.agent_id = os.getenv("AGENT_ID")
@@ -94,7 +108,7 @@ class SunAgentSystem:
                 Redis.from_url(os.getenv("REDIS_URL"), socket_connect_timeout=10, socket_timeout=10), expire=expire
             )
         self.sunpump_ops_service = SunPumpService(host=os.getenv("SUNPUMP_OPS_HOST"))
-        self.sunpump_api_service = SunPumpService(host=os.getenv("SUNPUMP_API_HOST"))
+        self.sunpump_tools = create_tools()
         self.context_builder = ContextBuilderAgent(
             self.agent_id,
             twitter_client=self.twitter_client,
@@ -155,7 +169,7 @@ class SunAgentSystem:
             description=TweetReplyTemplate["description"],
             system_message=TweetReplyTemplate["prompt"],
             model_client=self.text_model,
-            tools=[self.sunpump_ops_service.query_launch_token_status_by_user],
+            tools=self.sunpump_tools,
             reflect_on_tool_use=True,
             reflection_system_message=TweetReplyTemplate["prompt"],
             memory=get_sungenx_profile_memory() + get_knowledge_memory(),
