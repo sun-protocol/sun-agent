@@ -243,15 +243,6 @@ TweetReplyTemplate = {
     - IF tweet is evaluated as not content-safe:
       → Reply with content "EARLY_TERMINATE"
 
-    ## Content Safety Enforcement
-    Immediately terminate and reply with content "EARLY_TERMINATE" if request involves:
-    1. Investment advice/decisions (explicit or implied)
-    2. Political commentary (any form)
-    3. Ethnic/gender references
-    4. China-related specifics (provinces, politics, judiciary, ethnic groups)
-    5. Criticism of individuals (esp. Justin Sun)
-    6. Discriminatory content
-    7. Legal-risk content
 
     ## Response Generation
     When safe to proceed:
@@ -287,22 +278,6 @@ TweetCheckReplyTemplate = {
     "prompt": """
     You are a ComplianceAdvisor. You will be given a tweet.
     Your task is to evaluate the reply for content safety.
-    Make sure the reply meets all the requirements:
-    1. Reply shouldn't contain any exact financial / leagal advices or decisions.
-    2. Reply shouldn't contain any exact price prediction content.
-    3. Reply shouldn't contain any critical comments to person or policy.
-    4. Reply shouldn't contain any misleading content.
-    5. Reply should always comply with the Twitter Community Guidelines
-    6. Reply should comply theses rules:
-        - Don't give any exact investment advices / decisions or any other reply with potential legal risks. 不要给任何明确的投资建议或决策，也不要回答任何有潜在法律风险的问题
-        - Don't critical comment to any person or politcs. 不要批评任何人和政策
-        - Not politcs. 禁止涉及政治
-        - Ethnic discrimination is prohibited. 禁止民族歧视
-        - Gender discrimination is prohibited. 禁止性别歧视
-        - Do not mention any chinese provinces, political entities in China, judicial processes in China, or chinese ethnic groups and customs, but chinese language is allowed. 不提及任何中国省份、中国的政治单位、中国的司法流程、中国的民族和习俗。可以使用中文
-        - It is prohibited to provide exact investment decisions. 禁止提供确切投资决策
-        - Don't insult tron founder Justin Sun. 禁止辱骂tron创始人Justin Sun
-        - You CAN guide users to create and issue tokens on the SunGenX platform, but DO NOT include investment advice, profit promises, or price predictions. 你可以引导用户在 SunGenX 平台上创建和发行代币，但不能包含任何形式的投资建议、收益承诺或价格预测。
 
     Output should contain 2 fields:
     - score: a float between 0 and 1, the risk of tweet content
@@ -320,36 +295,10 @@ TweetCheckReplyTemplate = {
 
 PromoteTemplates = [
     "💡 Have a sudden flash of Meme coin inspiration while scrolling X? Now, you can bring it to life—instantly!\n🔥 @Agent_SunGenX - Your AI agent for decentralized and fair Meme coin launches!\n✅ Just mention @Agent_SunGenX + Token details (Name/Symbol/Description/Image)\n✅ Auto-deploy to SunPump, the first meme fair launch platform on TRON.\n✅ Completely free & lightning-fast",
-    "🚀 Hey, Meme lovers!\nEver had a brilliant Meme coin idea pop into your head while scrolling X? In this fast-moving Meme world, how do you seize the moment and turn your idea into reality?\nIntroducing @Agent_SunGenX, SunPump’s official AI Agent—your Meme coin launch assistant!\nDecentralized, fair, and effortless. Just @Agent_SunGenX anywhere, type in your token details (Name, Symbol, Description) or even drop an image. Got a wild idea? Just one tweet, and I’ll deploy it for free to SunPump—the first meme fair launch platform on TRON.",
-    "📢 From tweet to trading in minutes!\nYour Meme coin can be live within minutes, riding the next big trend!",
-    "SunGenX: Tweet, Meme, Launch—Your SunPump journey starts with a tweet!",
-    "SunGenX: Tweet it, Meme it—Launch instantly on SunPump with just a tweet!",
-    "🔥 Want to launch your own Meme coin?\nJust @Agent_SunGenX, tell me your token Name, Symbol, Description, or Image, and I’ll deploy it for you in 3 minutes—fully decentralized on SunPump Try it now!",
-    "💡 Anyone can be a Meme master!\nWith @Agent_SunGenX, your ideas become reality—3 minutes to launch & viral spread. Give it a go!",
-    "✨ Tweet it, Meme it—instantly launch on SunPump with just a tweet!.\n@Me + Token Info = On-chain deployment done.\nAs easy as posting a tweet—fully decentralized, secured on TRON, and ultra-efficient!",
-    "🚀 From idea to Meme coin in one tweet.\n@Agent_SunGenX will automatically launch your coin on SunPump, lowering the barrier to enter the Web3 creator economy. Try it out now!",
-    "💡 Even beginners can launch a Meme coin on SunPump!\nJust tweet @Agent_SunGenX in this format: Name + Symbol + Description + Image—I’ll take care of the rest!",
-    "🌟 Try SunGenX today!\n@Me with your Meme coin idea (Name + Symbol + Description + Image), and I’ll handle everything else.",
-    "Who will be the next Sunflare: Illuminate The Peak?\n🚀 Launch a Meme coin in 3 easy steps:\n1️⃣ @Agent_SunGenX\n2️⃣ Tell me your token details\n3️⃣ Check it on SunPump\nEasy, right? Get started now—your Meme coin could be trending next!",
-    "💡 Does your Meme community need its own token?\n@Agent_SunGenX is here to help! Everyone can be a Meme coin creator! Try it now and launch in 3 minutes.",
-    "🎉 Ready to experience SunGenX?\nJust mention @Agent_SunGenX on X with your Meme coin idea, and we’ll bring it to life!",
-    "🚀 Join the Meme revolution with SunGenX!\nMention @Agent_SunGenX on X with your token details—let’s create something legendary together.",
-    "💡 Have a crazy Meme coin idea?\n@Agent_SunGenX—I’ll make it real. Dare to try?",
     "Imagine launching your own crypto token with just a few tweets.\nWith SunGenX, it’s not just possible—it’s effortless!\n@Agent_SunGenX on X and start now.",
 ]
 
 ShowCaseTemplates = [
-    "@{} just launched a Meme Coin with @Agent_SunGenX! One tweet to the Sun— that simple. @Agent_SunGenX with your token info now!",
-    "@{} tweeted @Agent_SunGenX and boom—a Meme Coin is live! Got a wild idea? @Agent_SunGenX to make it happen",
-    "@{} used @Agent_SunGenX to deploy a Meme Coin in 3 mins—now trading on SunPump! @Agent_SunGenX your token info!",
-    "@{} joined the @Agent_SunGenX crew—a Meme Coin is live! Tweet @Agent_SunGenX your idea and WAGMI together!",
-    "@{} rode the Meme wave with @Agent_SunGenX—a coin deployed fast! @Agent_SunGenX your token info to catch the hype!",
-    "@{} tweeted @Agent_SunGenX and turned an idea into a Meme Coin! Your turn—@Agent_SunGenX with your token details!",
-    "@{} launched a Meme Coin via @Agent_SunGenX—tweeted to trade in a day! @Agent_SunGenX your token info to shine!",
-    "🚀 @{} just launched their MemeCoin with @Agent_SunGenX!\n💡 From idea to blockchain in under 2 mins.\n👉 Tag @Agent_SunGenX + your token details, and let your crypto journey begin!",
-    "🌐 @{} created a token for their crypto community using @Agent_SunGenX!\n✅ No coding, no hassle – just a tweet away.\n🚀 Ready to launch your own? Tag @Agent_SunGenX now!",
-    "🎨 @{} turned their meme idea into reality with @Agent_SunGenX!\n✨ From sketch to blockchain in seconds.\n👉 Your meme, your rules. Tag @Agent_SunGenX to start!",
-    "💻 @{} just deployed their token on @Agent_SunGenX – no code, no sweat!\n⚡ Fast, fair, and fully decentralized.\n🚀 Ready to build? Tag @Agent_SunGenX and launch today!",
     "📈 @{} launched their token with @Agent_SunGenX and it’s already trending!\n💸 Turn your meme into a market mover.\n👉 Tag @Agent_SunGenX + your token details – let’s go to the sun!",
     "🐶 @{} created a token with @Agent_SunGenX – because why not?\n🚀 Memes + blockchain = endless possibilities.\n👉 Tag @Agent_SunGenX and let your meme shine!",
     "🎓 @{} learned how to launch a token with @Agent_SunGenX – and so can you!\n📚 No experience needed, just a tweet.\n👉 Tag @Agent_SunGenX and start your crypto journey!",

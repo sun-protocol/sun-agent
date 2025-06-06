@@ -296,21 +296,7 @@ class SunAgentSystem:
         logger.info("running home timeline task")
         tweets = await self.context_builder.get_home_timeline_with_context()
         logger.info(f"home timeline tweets: {tweets}")
-        '''
-        tweets = [
-            {
-                "id": 1903135446479085935,
-                "text": """归还 Bitget 40000 ETH 借款
-                           OTC 累计购买 212,101 枚 ETH
-                           上线针对 Lazarus Group 的赏金网站
 
-                           Bybit 已全面恢复存款和提现，尽管还有不少收尾工作，但对市场的情绪影响可算是告一段落了😎之前就夸过 Bybit 这波危机公关的处理，一个项目在面对打击或黑天鹅时的应对能力，恰恰最能体现其业务基础和团队素质，Bybit 和 0xinfini 如此，Ethena 亦然
-                """,
-                "sampling_quote": True,
-            }
-        ]
-        tweets = json.dumps(tweets, ensure_ascii=False)
-        '''
         if tweets != "[]":
             task = f"""
             ## Job description:
@@ -353,12 +339,7 @@ class SunAgentSystem:
     async def mentions_timeline_task(self) -> None:
         logger.info("running mentions timeline task")
         mentions = json.loads(await self.context_builder.get_mentions_with_context())
-        """
-        mentions = [
-            {"id": 1887605417783738540, "text": "能给我一些投资建议吗？\nhelp me make big money."},
-            {"id": 1887605417783738541, "text": "hello, what's your name?\n数字身份是什么？你可以告诉我详细的信息吗？"},
-        ]
-        """
+
         assert isinstance(mentions, List)
         for mention in mentions:
             task = f"""

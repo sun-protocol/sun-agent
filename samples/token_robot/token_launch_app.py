@@ -377,52 +377,7 @@ class SunAgentSystem:
     async def mentions_task(self) -> None:
         logger.info("running mentions timeline task")
         mentions = json.loads(await self.context_builder.get_mentions_with_context())
-        """
-        mentions = [
-            {
-               "text": "<conversation><tweet>elon:\n@Agent_SunGenX make a toke,token description: 太阳</tweet><tweet>Agent_SunGenX:\n@elon token launched success! check it out https://sunpump.meme/token/TXWCmS9ZiPR9Bg9p6PrgV7SUJ5ekbzF9Tz\n\n</tweet><tweet>elon:\n@Agent_SunGenX Is the token launch job succeed just now?\n\n</tweet></conversation>",
-               "public_metrics": {
-                   "retweet_count": 0,
-                   "reply_count": 0,
-                   "like_count": 0,
-                   "quote_count": 0,
-                   "bookmark_count": 0,
-                   "impression_count": 0,
-               },
-               "id": "1896134362577707365",
-               "author": "elon",
-               "sampling_quote": False,
-            },
-            {
-                "text": "<conversation>\n<tweet>elon:\n@Agent_SunGenX make a meme coin</tweet><tweet>Agent_SunGenX:\n@elon 看起来你的推文可能缺少了一些内容。如果你有任何关于发行Meme coin的问题或需要帮助，请随时告诉我。我可以帮你快速高效地完成代币的创建和部署。🚀\n\n</tweet>\n<tweet>elon:\n@Agent_SunGenX What all do you need form me to finish this meme coin\n\n</tweet>\n</conversation>\n",
-                "public_metrics": {
-                    "retweet_count": 0,
-                    "reply_count": 0,
-                    "like_count": 0,
-                    "quote_count": 0,
-                    "bookmark_count": 0,
-                    "impression_count": 0,
-                },
-                "id": "1896134362577707365",
-                "author": "elon",
-                "sampling_quote": False,
-            },
-            {
-               "text": "<conversation><tweet>elon:\n@Agent_SunGenX make a toke,token description: 太阳</tweet></conversation>",
-               "public_metrics": {
-                   "retweet_count": 0,
-                   "reply_count": 0,
-                   "like_count": 0,
-                   "quote_count": 0,
-                   "bookmark_count": 0,
-                   "impression_count": 0,
-               },
-               "id": "1896134362577707365",
-               "author": "elon",
-               "sampling_quote": True,
-            },
-        ]
-        """
+
         assert isinstance(mentions, List)
         for mention in mentions:
             result = await self.sunpump_ops_service.can_launch_new_token(mention["author"])
