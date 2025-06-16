@@ -14,6 +14,7 @@ from typing import (
 import aiohttp
 
 from ._constants import LOGGER_NAME
+from .agents._http_utils import fetch_url
 
 logger = logging.getLogger(LOGGER_NAME)
 

@@ -1,0 +1,1 @@
+uv build --all-packages --wheel --out-dir dist
