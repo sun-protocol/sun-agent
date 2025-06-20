@@ -1,14 +1,14 @@
+import json
 import logging
-import os
 import traceback
 from io import BytesIO
 from typing import (
-    Any,
-    Dict,
     Optional,
     Sequence,
 )
 
+from google.genai import Client, types
+from PIL import Image as PILImage
 from autogen_agentchat.agents import BaseChatAgent
 from autogen_agentchat.base import Response
 from autogen_agentchat.messages import (
@@ -18,17 +18,43 @@ from autogen_agentchat.messages import (
 )
 from autogen_core import CancellationToken, Image
 from autogen_core.models import (
-    SystemMessage,
+    UserMessage,
 )
-from google import genai
-from google.genai import types
-from PIL import Image as PILImage
+from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
 
-from .._constants import LOGGER_NAME
-from ._http_utils import fetch_url
-from ._markdown_utils import extract_markdown_json_blocks, extract_tweets_from_markdown_json_blocks
+from sunagent_app._constants import LOGGER_NAME
+from ._markdown_utils import extract_json_from_string
 
 logger = logging.getLogger(LOGGER_NAME)
+
+OptimizeImagePromptTemplate = """
+Create a vivid image prompt based on the Twitter conversation
+
+Original Tweet: "{last_tweet}"
+Reply: "{content}"
+
+Instructions:
+1. Identify 3-5 key visual elements (focus on nouns: objects, places, symbols)
+2. Note 1-2 emotions/moods from the conversation
+3. Select appropriate style based on content (examples below)
+4. Combine into 20-30 word (40 words maximum) description
+
+Style Suggestions (adapt to context):
+- "Playful cartoon with exaggerated features"
+- "Watercolor with soft blending"
+- "Isometric tech illustration"
+- "Minimalist line art"
+- "Surreal collage effect"
+- "Neon cyberpunk aesthetic"
+- "Claymation texture"
+- "Retro futuristic"
+
+Rules:
+- No specific people/faces
+- Include important elements from the last_tweet and content
+
+Output ONLY the generated prompt.
+"""
 
 
 class ImageGenerateAgent(BaseChatAgent):
@@ -39,26 +65,24 @@ class ImageGenerateAgent(BaseChatAgent):
     def __init__(
         self,
         name: str,
+        text_model_client: AzureOpenAIChatCompletionClient,
+        image_model_client: Client,
         *,
         description: str = """
         An agent that extract image attachment of given tweet, or generate an image according to the image description in the tweet.
         Image is base64 encoded.
         An information extraction agent must be called before this agent.
         """,
-        system_message: str = """
-        Flat illustration, cyberpunk style, bright colors, a sense of technology,
-        Game CG style, American cartoon style, 3D rendering,
-        Pop art style, bright colors, exaggerated geometric patterns and color blocks,
-        Hyperrealistic style, future technology, surrealism, fluorescent color,
-        """,
-        model_name: str = "imagen-3.0-generate-002",
+        image_model_name: str = "imagen-3.0-generate-002",
+        image_path: str = "generated_image.png",
         width: int = 400,
         height: int = 400,
     ) -> None:
         super().__init__(name=name, description=description)
-        self._model_client = genai.Client(api_key=os.getenv("GOOGLE_GEMINI_API_KEY"))
-        self._model_name = model_name
-        self._system_message = SystemMessage(content=system_message)
+        self._image_model_name = image_model_name
+        self._image_path = image_path
+        self.image_model_client = image_model_client
+        self.text_model_client = text_model_client
         self.width = width
         self.height = height
 
@@ -68,49 +92,58 @@ class ImageGenerateAgent(BaseChatAgent):
         return (MultiModalMessage, TextMessage)
 
     async def on_messages(self, messages: Sequence[ChatMessage], cancellation_token: CancellationToken) -> Response:
-        tweet: Optional[Dict[str, Any]] = None
         image_description: Optional[str] = None
-        for message in messages:
-            if message.source == "user":
-                tweets = extract_tweets_from_markdown_json_blocks(message.content)
-                tweet = tweets[0] if len(tweets) > 0 else None
-            elif isinstance(message, TextMessage):
-                blocks = extract_markdown_json_blocks(message.content)
-                for block in blocks:
-                    if isinstance(block, Dict) and "symbol" in block and "image_description" in block:
-                        image_description = block["image_description"]
-        assert tweet is not None
         image: Optional[PILImage] = None
-        if "image_url" in tweet:
-            raw_image = await fetch_url(tweet["image_url"])
-            if raw_image is not None:
-                image = PILImage.open(BytesIO(raw_image))
-        else:
-            # generate image
-            if image_description is None:
-                return Response(chat_message=TextMessage(content="ask user for image_description", source=self.name))
-            try:
-                prompt = ",".join([self._system_message.content, image_description])
-                response = self._model_client.models.generate_images(
-                    model=self._model_name,
-                    prompt=prompt,
-                    config=types.GenerateImagesConfig(
-                        number_of_images=1,
-                        person_generation=types.PersonGeneration.ALLOW_ADULT,
-                    ),
+        for message in messages:
+            if message.source == "ImageAdvisor":
+                reply_msg = extract_json_from_string(message.content)
+                if reply_msg["need_image"]:
+                    description = {"last_tweet": reply_msg["last_tweet"], "content": reply_msg["content"]}
+                    image_description = json.dumps(description, ensure_ascii=False)
+                    try:
+                        image_generation_prompt = await self.text_model_client.create(
+                            [
+                                UserMessage(
+                                    content=[OptimizeImagePromptTemplate, image_description],
+                                    source="user",
+                                ),
+                            ],
+                        )
+                        image_description = image_generation_prompt.content
+                    except Exception as e:
+                        logger.error(f"error analyzing the given image, {e}")
+                        return Response(
+                            chat_message=TextMessage(content=f"error analyzing image: {e}. TERMINATE", source=self.name)
+                        )
+
+        # generate image
+        if image_description is None:
+            return Response(
+                chat_message=TextMessage(
+                    content="don't need image generation OR image_description is not provided, TERMINATE",
+                    source=self.name,
                 )
-                raw_image = response.generated_images[0].image.image_bytes
-                image = PILImage.open(BytesIO(raw_image), formats=["JPEG", "PNG"])
-            except Exception as e:
-                logger.error(traceback.format_exc())
-                logger.error(f"Error generate image, {e}")
+            )
+        try:
+            response = self.image_model_client.models.generate_images(
+                model=self._image_model_name,
+                prompt=image_description,
+                config=types.GenerateImagesConfig(
+                    number_of_images=1,
+                ),
+            )
+            raw_image = response.generated_images[0].image.image_bytes
+            image = PILImage.open(BytesIO(raw_image), formats=["PNG"])
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            logger.error(f"Error generate image, {e}")
 
         if image is None:
-            return Response(chat_message=TextMessage(content="tell user to try again later", source=self.name))
+            return Response(
+                chat_message=TextMessage(content="tell user to try again later, TERMINATE", source=self.name)
+            )
         image = image.resize((self.width, self.height))
-        return Response(
-            chat_message=MultiModalMessage(content=["Here is the token image", Image.from_pil(image)], source=self.name)
-        )
+        return Response(chat_message=MultiModalMessage(content=[Image.from_pil(image)], source=self.name))
 
     async def on_reset(self, cancellation_token: CancellationToken) -> None:
         """Reset the assistant agent to its initialization state."""
