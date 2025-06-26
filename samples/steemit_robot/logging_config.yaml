@@ -1,0 +1,56 @@
+# logging_config.yaml
+version: 1
+disable_existing_loggers: False  # Important: Don't disable other loggers
+
+formatters:
+  simple:
+    format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  # json:
+  #   class: pythonjsonlogger.jsonlogger.JsonFormatter
+  #   format: '%(asctime)s %(name)s %(levelname)s %(message)s %(pathname)s %(lineno)d'
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: INFO
+    formatter: simple
+    stream: ext://sys.stdout
+  file:
+    class: logging.handlers.RotatingFileHandler
+    level: INFO
+    formatter: simple
+    filename: ./steemit.log  # Absolute path!
+    maxBytes: 10485760 # 10MB
+    backupCount: 5  # Keep 5 rotated logs
+  # Example for sending logs to a Syslog server:
+  # syslog:
+  #   class: logging.handlers.SysLogHandler
+  #   level: WARNING
+  #   formatter: simple
+  #   address: /dev/log # Or ('localhost', 514) for remote syslog
+
+loggers:
+  sunagent_core.events:
+    level: INFO
+    handlers: [file] # Send logs to console and file
+    propagate: False # Prevent logs from going to the root logger (optional)
+  sunagent_core.trace:
+    level: DEBUG
+    handlers: [file] # Send logs to file
+    propagate: False # Prevent logs from going to the root logger (optional)
+  sunagent_ws:
+    level: INFO
+    handlers: [console, file] # Send logs to file
+    propagate: False # Prevent logs from going to the root logger (optional)
+  sunagent_cryptoq:
+    level: DEBUG
+    handlers: [ console, file ] # Send logs to file
+    propagate: False # Prevent logs from going to the root logger (optional)
+  werkzeug:  #werkzeug logger
+    handlers: [console, file]
+    level: INFO
+    propagate: False
+
+root: # Configure the root logger (catch-all)
+  level: INFO
+  handlers: [console]
