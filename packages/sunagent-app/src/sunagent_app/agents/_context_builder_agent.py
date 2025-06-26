@@ -18,6 +18,7 @@ from typing import (
 
 import pytz
 import requests
+from requests_oauthlib import OAuth1
 from autogen_core import CacheStore
 from tweepy import Client as TwitterClient
 from tweepy import (
@@ -237,6 +238,7 @@ class ContextBuilderAgent:
         self,
         agent_id: str,
         twitter_client: TwitterClient,
+        oauth: OAuth1,
         cache: Optional[CacheStore] = None,
         max_depth: int = 5,
         timeout: int = 30,
@@ -245,6 +247,7 @@ class ContextBuilderAgent:
         self.twitter = twitter_client
         self.twitter.session = TimeoutSession(timeout=timeout)
         self.user_auth = self.twitter.access_token_secret is not None
+        self.oauth = oauth
         self.cache = cache
         self.max_depth = max_depth
         self.retry_limit = 2
@@ -257,9 +260,7 @@ class ContextBuilderAgent:
             "SAMPLING_QUOTE_TWEET": DailyRateLimit(2, 8),
         }
         self.recover_time: Optional[int] = None
-        self.block_user_ids = []
-        if os.getenv("BLOCK_USER_IDS"):
-            self.block_user_ids = json.loads(os.getenv("BLOCK_USER_IDS"))
+        self.block_user_ids = json.loads(os.getenv("BLOCK_USER_IDS", "[]"))
         logger.error(f"block_user_ids: {self.block_user_ids}")
         self.robot_freq_limit = int(os.getenv("ROBOT_FREQ_LIMIT", "5"))
 
@@ -654,6 +655,124 @@ class ContextBuilderAgent:
         # generate necessary fields
         simplified_tweet["sampling_quote"] = "referenced_tweets" not in tweet or len(tweet["referenced_tweets"]) == 0
         return simplified_tweet
+
+    async def reply_to_tweet_with_image(self, tweet_id, text, image_bytes):
+        """
+        Main function to reply to a tweet with an image
+
+        Args:
+            tweet_id: Target tweet ID to reply to
+            text: Reply text content
+            image_bytes: Image bytes
+
+        Returns:
+            dict: Tweet response data if successful, None otherwise
+        """
+        try:
+            # Upload the image
+            media_id = self.image_upload_with_v2(image_bytes)
+
+            # Post the reply with media
+            response = self.twitter.create_tweet(text=text, media_ids=[media_id], in_reply_to_tweet_id=tweet_id)
+            data = response.data
+            logger.debug(f"Twitter api tweet_creation result：{response}")
+
+            if data and data["id"]:
+                logger.info(f"Successfully posted tweet reply! Tweet ID: {data['id']}")
+            return data
+        except Exception as e:
+            logger.error(f"Tweet with image post failed: {e}")
+            raise e
+
+    async def create_tweet_with_image(self, text, image_bytes):
+        """
+        Main function to reply to a tweet with an image
+
+        Args:
+            tweet_id: Target tweet ID to reply to
+            text: Reply text content
+            image_bytes: Image bytes
+
+        Returns:
+            dict: Tweet response data if successful, None otherwise
+        """
+        try:
+            # Upload the image
+            media_id = self.image_upload_with_v2(image_bytes)
+
+            # Post the reply with media
+            response = self.twitter.create_tweet(text=text, media_ids=[media_id])
+            data = response.data
+            logger.debug(f"Twitter api tweet_creation result：{response}")
+
+            if data and data["id"]:
+                logger.info(f"Successfully posted tweet reply! Tweet ID: {data['id']}")
+            return data
+        except Exception as e:
+            logger.error(f"Tweet with image post failed: {e}")
+            raise e
+
+    def image_upload_with_v2(self, image_bytes) -> int:
+        """
+        Upload image using Twitter API V2 (avoid blocking)
+
+        Args:
+            image_bytes: Image bytes
+
+        Returns:
+            dict: Tweet response data if successful, None otherwise
+        """
+        try:
+            # Step1: Initialize Media Upload
+            initialize_url = "https://api.twitter.com/2/media/upload/initialize"
+
+            # Create a multipart form with the image file using the correct content type
+            payload = {
+                "media_category": "tweet_image",
+                "media_type": "image/png",
+                "shared": False,
+                "total_bytes": len(image_bytes),
+            }
+
+            initialize_response = requests.post(initialize_url, auth=self.oauth, json=payload)
+
+            if initialize_response.status_code == 200:
+                media_data = initialize_response.json()["data"]
+                if "id" in media_data:
+                    media_id = media_data["id"]
+                else:
+                    raise ValueError(f"unexpected response format from Twitter media upload: {media_data}")
+            else:
+                raise ValueError(
+                    f"failed to initialize image upload. Status code: {initialize_response.status_code}, Response: {initialize_response.text}"
+                )
+
+            # Step2: Append media chunk of bytes using the APPEND command
+            upload_url = f"https://api.twitter.com/2/media/upload/{media_id}/append"
+
+            request_data = {
+                "segment_index": 0
+            }
+
+            files = {
+                "media": image_bytes,
+            }
+
+            append_response = requests.post(url=upload_url, data=request_data, files=files, auth=self.oauth)
+
+            if append_response.status_code != 200:
+                raise ValueError(
+                    f"failed to append image to Twitter. Status code: {append_response.status_code}, Response: {append_response.text}"
+                )
+
+            # Step3: Finalize media upload
+            finalize_url = f"https://api.twitter.com/2/media/upload/{media_id}/finalize"
+            finalize_response = requests.post(finalize_url, auth=self.oauth)
+            data = finalize_response.json()["data"]
+            return int(data["id"])
+        except Exception as e:
+            logger.error(f"An unexpected error occurred: {e}")
+            raise e
 
     def _format_tweet_data(self, tweet: Dict[str, Any], users: Dict[str, User], medias: Dict[str, Media]) -> None:
         """标准化推文内容"""
