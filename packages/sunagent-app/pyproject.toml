@@ -18,6 +18,7 @@ dependencies = [
   "autogen-core",
   "openpyxl",
   "autogen-ext",
+  "beem",
   "sunagent-ext",
   "autogen-agentchat",
   "autogen",
