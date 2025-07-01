@@ -578,24 +578,6 @@ class ContextBuilderAgent:
         text += "</conversation>\n"
         return text
 
-    async def build_mention_context(self, tweet: Dict[str, Any]) -> tuple[List[str], str]:
-        """
-        build the full conversation of given tweet
-        :param tweet_id: last tweet ID
-        :return: full conversation in plain text
-        """
-        # 获取缓存
-        his = []
-        if "conversation_id" not in tweet:
-            tweet["conversation_id"] = tweet["id"]
-        conversation: List[Dict[str, Any]] = []
-        await self._recursive_fetch(tweet, conversation, 0)
-        current_tweet = conversation[-1]['text']
-        if len(conversation) > 1:
-            for tweet in conversation[0:-1]:
-                his.append(tweet['text'])
-        return his,current_tweet
-
     async def _recursive_fetch(self, tweet: Dict[str, Any], conversation: List[Dict[str, Any]], depth: int) -> bool:
         """
         递归获取父级推文的核心逻辑
@@ -868,15 +850,6 @@ class ContextBuilderAgent:
         except Exception:
             pass
 
-    async def _get_robot_freq(self, tweet: Dict[str, Any]) -> int:
-        if self.cache is None or not tweet["is_robot"]:
-            return -1
-        try:
-            freq = self.cache.get(f"{self.agent_id}:{FREQ_KEY_PREFIX}{tweet['conversation_id']}:{tweet['author_id']}")
-            return int(freq) if freq else 0
-        except Exception:
-            return 0
-
     async def _get_freq(self, tweet: Dict[str, Any]) -> int:
         if self.cache is None:
             return -1
@@ -886,21 +859,10 @@ class ContextBuilderAgent:
         except Exception:
             return 0
 
-    async def _increase_robot_freq(self, tweet: Dict[str, Any]) -> None:
-        if self.cache is None or not tweet["is_robot"]:
-            return
-        freq = await self._get_robot_freq(tweet)
-        try:
-            self.cache.set(
-                f"{self.agent_id}:{FREQ_KEY_PREFIX}{tweet['conversation_id']}:{tweet['author_id']}", str(freq + 1)
-            )
-        except Exception:
-            pass
-
     async def _increase_freq(self, tweet: Dict[str, Any]) -> None:
         if self.cache is None:
             return
-        freq = await self._get_robot_freq(tweet)
+        freq = await self._get_freq(tweet)
         try:
             self.cache.set(
                 f"{self.agent_id}:{FREQ_KEY_PREFIX}{tweet['conversation_id']}", str(freq + 1)
