@@ -262,7 +262,8 @@ class ContextBuilderAgent:
         self.recover_time: Optional[int] = None
         self.block_user_ids = json.loads(os.getenv("BLOCK_USER_IDS", "[]"))
         logger.error(f"block_user_ids: {self.block_user_ids}")
-        self.robot_freq_limit = int(os.getenv("ROBOT_FREQ_LIMIT", "5"))
+        self.white_user_ids = json.loads(os.getenv("MENTIONS_WHITE_USER_ID", "[]"))
+        self.reply_freq_limit = int(os.getenv("MAX_REPLY_COUNT", "5"))
 
     def _remove_recover_time(self, description: str) -> (str, int):
         pattern = re.compile(r"(\s*Status: Off\s*Recovery time: \d+-\d+-\d+ \d+:\d+ UTC\+8\s*)")
@@ -546,7 +547,7 @@ class ContextBuilderAgent:
                 or self.block_user_ids.count(int(tweet["author_id"])) != 0
                 or is_processed
                 or not filter_func(tweet)
-                or await self._get_freq(tweet) >= self.robot_freq_limit
+                or (await self._get_freq(tweet) >= self.reply_freq_limit and self.white_user_ids.count(int(tweet["author_id"])) == 0)
             ):
                 continue
             await self._increase_freq(tweet)
