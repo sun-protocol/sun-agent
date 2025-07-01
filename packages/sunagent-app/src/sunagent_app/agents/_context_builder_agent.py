@@ -659,10 +659,9 @@ class ContextBuilderAgent:
         return None
 
     async def _normalize_tweet(self, tweet: Dict[str, Any]) -> Dict[str, Any]:
-        tweet["text"] = await self.build_context(tweet)
         history,last = await self.build_mention_context(tweet)
-        tweet["histroy"] = history
-        tweet["last_mention"] = last
+        tweet["history"] = history
+        tweet["text"] = last
         FILTER_FIELDS = [
             "id",
             "text",
