@@ -463,10 +463,6 @@ class ContextBuilderAgent:
         since_id: Optional[str] = None
         next_token: Optional[str] = None
         cache_key = f"{self.agent_id}:{MENTIONS_TIMELINE_ID}"
-        if self.quota["POST_TWEET"].remain_quota() < 10:
-            if self.cache:
-                self.cache.delete(cache_key)
-            return "[]"
         # 未到服务恢复时间
         code, _ = await self.unset_recover_time()
         if code != 0:
@@ -542,13 +538,15 @@ class ContextBuilderAgent:
         for tweet in all_tweets:
             is_processed = await self._check_tweet_process(tweet["id"])
             has_processed = has_processed or is_processed
+            freq = await self._get_freq(tweet)
             if (
                 tweet["author_id"] == self.me.data["id"]
                 or self.block_user_ids.count(int(tweet["author_id"])) != 0
                 or is_processed
                 or not filter_func(tweet)
-                or (await self._get_freq(tweet) >= self.reply_freq_limit and self.white_user_ids.count(int(tweet["author_id"])) == 0)
+                or (freq >= self.reply_freq_limit and self.white_user_ids.count(int(tweet["author_id"])) == 0)
             ):
+                logger.info(f"skip tweet {tweet['id']} freq {freq}")
                 continue
             await self._increase_freq(tweet)
             await self._mark_tweet_process(tweet["id"])
