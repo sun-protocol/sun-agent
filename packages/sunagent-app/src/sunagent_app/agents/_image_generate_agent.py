@@ -1,5 +1,6 @@
 import json
 import logging
+import random
 import traceback
 from io import BytesIO
 from typing import (
@@ -28,34 +29,92 @@ from ._markdown_utils import extract_json_from_string
 logger = logging.getLogger(LOGGER_NAME)
 
 OptimizeImagePromptTemplate = """
-Create a vivid image prompt based on the Twitter conversation
+# Your Task
+Generate a vivid, detailed image prompt based on the Twitter conversation below. The prompt should:
+- Accurately capture the main idea of the tweet.
+- Depict a scene that is realistic and physically plausible.
+- Be directly usable by a text-to-image model.
+- Output ONLY the English prompt, do NOT include your thought process.
 
 Original Tweet: "{last_tweet}"
 Reply: "{content}"
 
-Instructions:
-1. Identify 3-5 key visual elements (focus on nouns: objects, places, symbols)
-2. Note 1-2 emotions/moods from the conversation
-3. Select appropriate style based on content (examples below)
-4. Combine into 20-30 word (40 words maximum) description
+# Image Style
+{image_style}
 
-Style Suggestions (adapt to context):
-- "Playful cartoon with exaggerated features"
-- "Watercolor with soft blending"
-- "Isometric tech illustration"
-- "Minimalist line art"
-- "Surreal collage effect"
-- "Neon cyberpunk aesthetic"
-- "Claymation texture"
-- "Retro futuristic"
+# Three-Step Method
 
-Rules:
-- No specific people/faces
-- Include important elements from the last_tweet and content
+## Step 1: Identify Key Elements
+Extract 3-5 important keywords from the tweet, such as:
+- People/Companies (e.g., Vitalik Buterin, Robinhood)
+- Events/Themes (e.g., Fireside Chat, Crypto's Next Chapter)
+- Locations/Times (e.g., Cannes, July 1st)
 
-Output ONLY the generated prompt.
+## Step 2: Visualize It
+Transform these keywords into visual elements:
+- Turn companies or people into symbolic characters or objects.
+- Represent events as scenes or actions.
+- Use slogans or themes as banners, signs, or text in the image.
+
+## Step 3: Compose the Prompt
+Describe the image using the following template:
+- **Style:** One sentence describing the art style.
+- **Scene:** One sentence summarizing the overall scene.
+- **Details:** Bullet points listing the main elements and their symbolic meanings.
+
+# Output Format Example
+- Style: [Describe the art style]
+- Scene: [Describe the main scene]
+- Details:
+    1. [Key element 1 and its meaning]
+    2. [Key element 2 and its meaning]
+    3. [Additional relevant details]
+    
+# Examples
+## Example 1
+1. tweet content:
+    Hong Kong's Cai Wensheng acquires a 35% stake in China Financial Leasing at a 13.4% premium, aiming to pivot towards AI, Web3, and digital assets. Could this signal a stronger focus on tech incubation and decentralized industries in the region? A move worth watching for blockchain and AI enthusiasts. 
+2. output: 
+    - Style:
+    A vibrant and dynamic retro-futuristic cartoon poster illustration, characterized by bold outlines and a high-contrast color palette.
+    -Scene:
+    A visionary Asian businessman plants a flag for a new technological era in front of Hong Kong's iconic Victoria Harbour skyline at dawn.
+    -Details:
+    The Visionary: A stylized character representing Cai Wensheng, dressed in a sharp suit, confidently planting a large flag.
+    The Tech Flag: The flag is emblazoned with the glowing words "AI" & "WEB3", symbolizing the strategic pivot.
+    The Transformation: In the background, a classic, stone financial building (symbolizing "China Financial Leasing") is visibly transforming, with glowing blue circuits and futuristic panels growing over it.
+    The Backdrop: A detailed, recognizable Hong Kong skyline, including the Bank of China Tower and IFC, bathed in the optimistic light of a new day.
+    Floating Symbols: Holographic icons representing artificial intelligence (like a glowing brain) and blockchain (interlinked digital cubes) float in the air.
+    The Billboard: A large, retro-style billboard in the sky reads: "HONG KONG'S NEW FRONTIER: FROM FINANCE TO FUTURE TECH".
+
+## Example 2
+1. tweet content:
+    Matrixdock, Matrixport's RWA tokenization platform, is adding silver, platinum, and palladium tokens to its offering. With silver up 25% and platinum surging 44% this year, they're bridging traditional commodities with blockchain. Will tokenized precious metals reshape on-chain investment strategies?
+2. output:
+    - Style:
+    Vibrant retro-futuristic comic book illustration, featuring bold, saturated colors (like reds, yellows, and blues), thick black outlines, and a dynamic, energetic composition.
+    -Scene:
+    A massive, powerful minting machine, the "Matrixdock Minter," serves as the centerpiece, actively transforming physical precious metals into digital assets on a grand scale.
+    -Details:
+    The Minter Machine (Matrixdock): A large, industrial-yet-high-tech machine with visible gears, pipes, and glowing lights. On its side, the name "MATRIXDOCK" is printed in bold lettering.
+    The Input (Commodities): On the left, a conveyor belt feeds shiny, physical bars of silver, platinum, and palladium into an intake chute of the machine.
+    The Output (Tokens): On the right, the machine dispenses a cascade of glowing, hexagonal digital tokens. Each token is translucent and clearly marked with a chemical symbol: "Ag," "Pt," and "Pd."
+    The Blockchain River: The newly minted tokens fall onto a luminous, digital river made of interconnected, glowing blocks that flows towards the viewer, representing the blockchain.
+    The Billboard Sign: In the background, a large yellow sign, similar to the one in the reference image, reads: "OLD METALS. NEW MONEY. Silver +25% | Platinum +44%" to highlight the value and transformation.
+
 """
-
+image_styles = [
+    # 吉卜力工作室风格
+    "Studio Ghibli style, magical atmosphere, hand-drawn look, soft colors",
+    # 动态卡通风格插画
+    "dynamic cartoon-style illustration",
+    # 立体纸艺/剪纸风 (3D Papercraft / Kirigami Style)
+    "papercraft, kirigami style, layered paper, paper quilling, diorama, made of paper, 3D paper art",
+    # 等轴体素艺术 (Isometric Voxel Art)
+    "isometric voxel art of [object], a tiny room made of voxels, pixel art, 3D pixel, clean edges, video game aesthetic",
+    # 黏土动画/定格动画风 (Claymation / Stop-Motion Style)
+    "claymation character, stop-motion animation style, made of plasticine, fingerprint details, in the style of Aardman Animations",
+]
 
 class ImageGenerateAgent(BaseChatAgent):
     """An agent that generate an image based on the description in the tweet.
@@ -98,7 +157,10 @@ class ImageGenerateAgent(BaseChatAgent):
             if message.source == "ImageAdvisor":
                 reply_msg = extract_json_from_string(message.content)
                 if reply_msg["need_image"]:
-                    description = {"last_tweet": reply_msg["last_tweet"], "content": reply_msg["content"]}
+                    # 1. 根据推文生成image 的文本描述
+                    image_style = random.choice(image_styles)
+                    logger.info(f"generate image with image_style: {image_style}")
+                    description = {"last_tweet": reply_msg["last_tweet"], "content": reply_msg["content"], "image_style": image_style}
                     image_description = json.dumps(description, ensure_ascii=False)
                     try:
                         image_generation_prompt = await self.text_model_client.create(
@@ -125,6 +187,7 @@ class ImageGenerateAgent(BaseChatAgent):
                 )
             )
         try:
+            logger.info(f"generate image with prompt: {image_description}")
             response = self.image_model_client.models.generate_images(
                 model=self._image_model_name,
                 prompt=image_description,
