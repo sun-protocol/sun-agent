@@ -104,15 +104,15 @@ Describe the image using the following template:
 
 """
 image_styles = [
-    # 吉卜力工作室风格
+    # Studio Ghibli style
     "Studio Ghibli style, magical atmosphere, hand-drawn look, soft colors",
-    # 动态卡通风格插画
+    # Dynamic cartoon-style illustration
     "dynamic cartoon-style illustration",
-    # 立体纸艺/剪纸风 (3D Papercraft / Kirigami Style)
+    # 3D Papercraft / Kirigami Style
     "papercraft, kirigami style, layered paper, paper quilling, diorama, made of paper, 3D paper art",
-    # 等轴体素艺术 (Isometric Voxel Art)
+    # Isometric Voxel Art
     "isometric voxel art of [object], a tiny room made of voxels, pixel art, 3D pixel, clean edges, video game aesthetic",
-    # 黏土动画/定格动画风 (Claymation / Stop-Motion Style)
+    # Claymation / Stop-Motion Style
     "claymation character, stop-motion animation style, made of plasticine, fingerprint details, in the style of Aardman Animations",
 ]
 
@@ -151,62 +151,105 @@ class ImageGenerateAgent(BaseChatAgent):
         return (MultiModalMessage, TextMessage)
 
     async def on_messages(self, messages: Sequence[ChatMessage], cancellation_token: CancellationToken) -> Response:
-        image_description: Optional[str] = None
-        image: Optional[PILImage] = None
+        try:
+            # 1. Extract the metadata required for image generation
+            image_metadata = self.get_image_generation_metadata(messages)
+            if not image_metadata:
+                return self._create_no_image_response()
+
+            # 2. Generate an optimized image prompt
+            image_prompt = await self._generate_image_prompt(image_metadata)
+            if not image_prompt:
+                return self._create_error_response("Failed to generate image prompt")
+
+            # 3. Generate the image
+            image = await self._generate_image(image_prompt)
+            if not image:
+                return self._create_error_response("Failed to generate image, please try again later")
+
+            # 4. Return the response containing the image
+            return self._create_image_response(image)
+        except Exception as e:
+            logger.error(f"Error in on_messages: {e}")
+            logger.error(traceback.format_exc())
+            return self._create_error_response(f"Unexpected error: {e}")
+
+    def get_image_generation_metadata(self, messages: Sequence[ChatMessage]) -> Optional[dict]:
+        """Extract the metadata required for image generation from the messages."""
         for message in messages:
             if message.source == "ImageAdvisor":
-                reply_msg = extract_json_from_string(message.content)
-                if reply_msg["need_image"]:
-                    # 1. 根据推文生成image 的文本描述
-                    image_style = random.choice(image_styles)
-                    logger.info(f"generate image with image_style: {image_style}")
-                    description = {"last_tweet": reply_msg["last_tweet"], "content": reply_msg["content"], "image_style": image_style}
-                    image_description = json.dumps(description, ensure_ascii=False)
-                    try:
-                        image_generation_prompt = await self.text_model_client.create(
-                            [
-                                UserMessage(
-                                    content=[OptimizeImagePromptTemplate, image_description],
-                                    source="user",
-                                ),
-                            ],
-                        )
-                        image_description = image_generation_prompt.content
-                    except Exception as e:
-                        logger.error(f"error analyzing the given image, {e}")
-                        return Response(
-                            chat_message=TextMessage(content=f"error analyzing image: {e}. TERMINATE", source=self.name)
-                        )
+                try:
+                    reply_msg = extract_json_from_string(message.content)
+                    if reply_msg.get("need_image"):
+                        return {
+                            "last_tweet": reply_msg.get("last_tweet", ""),
+                            "content": reply_msg.get("content", ""),
+                            "image_style": random.choice(image_styles)
+                        }
+                except Exception as e:
+                    logger.error(f"Error extracting image metadata: {e}")
+        return None
 
-        # generate image
-        if image_description is None:
-            return Response(
-                chat_message=TextMessage(
-                    content="don't need image generation OR image_description is not provided, TERMINATE",
-                    source=self.name,
-                )
-            )
+    async def _generate_image_prompt(self, image_metadata: dict) -> Optional[str]:
+        """Generate an optimized image prompt."""
         try:
-            logger.info(f"generate image with prompt: {image_description}")
+            logger.info(f"Generating image with style: {image_metadata['image_style']}")
+            prompt_text = OptimizeImagePromptTemplate.format(
+                last_tweet=image_metadata["last_tweet"],
+                content=image_metadata["content"],
+                image_style=image_metadata["image_style"]
+            )
+            response = await self.text_model_client.create([
+                UserMessage(
+                    content=prompt_text,
+                    source="user",
+                ),
+            ])
+            return response.content
+        except Exception as e:
+            logger.error(f"Error generating image prompt: {e}")
+            return None
+
+    async def _generate_image(self, image_prompt: str) -> Optional[PILImage.Image]:
+        """Generate an image based on the image prompt."""
+        try:
+            logger.info(f"Generating image with prompt: {image_prompt}")
             response = self.image_model_client.models.generate_images(
                 model=self._image_model_name,
-                prompt=image_description,
-                config=types.GenerateImagesConfig(
-                    number_of_images=1,
-                ),
+                prompt=image_prompt,
+                config=types.GenerateImagesConfig(number_of_images=1),
             )
             raw_image = response.generated_images[0].image.image_bytes
             image = PILImage.open(BytesIO(raw_image), formats=["PNG"])
+            return image.resize((self.width, self.height))
         except Exception as e:
+            logger.error(f"Error generating image: {e}")
             logger.error(traceback.format_exc())
-            logger.error(f"Error generate image, {e}")
+            return None
 
-        if image is None:
-            return Response(
-                chat_message=TextMessage(content="tell user to try again later, TERMINATE", source=self.name)
+    def _create_no_image_response(self) -> Response:
+        return Response(
+            chat_message=TextMessage(
+                content="don't need image generation OR image_prompt is not provided, TERMINATE",
+                source=self.name,
             )
-        image = image.resize((self.width, self.height))
-        return Response(chat_message=MultiModalMessage(content=[Image.from_pil(image)], source=self.name))
+        )
+
+    def _create_error_response(self, error_message: str) -> Response:
+        return Response(
+            chat_message=TextMessage(
+                content=f"{error_message}, TERMINATE",
+                source=self.name,
+            )
+        )
+
+    def _create_image_response(self, image: PILImage.Image) -> Response:
+        return Response(
+            chat_message=MultiModalMessage(
+                content=[Image.from_pil(image)],
+                source=self.name,
+            )
+        )
 
     async def on_reset(self, cancellation_token: CancellationToken) -> None:
         """Reset the assistant agent to its initialization state."""

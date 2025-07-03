@@ -78,7 +78,7 @@ class ImageAnalysisAgent(BaseChatAgent):
             else:
                 return Response(
                     chat_message=TextMessage(
-                        content=f"image quality is not good enough TERMINATE, reason: {extracted_json["reason"]}",
+                        content=f"image quality is not good enough TERMINATE, score: {extracted_json.get('score', 'N/A')}, reason: {extracted_json['reason']}",
                         source=self.name,
                     )
                 )
