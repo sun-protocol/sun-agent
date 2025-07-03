@@ -24,6 +24,7 @@ from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
 
 from sunagent_app._constants import LOGGER_NAME
 from ._markdown_utils import extract_json_from_string
+from sunagent_app.metrics import model_api_failure_count,model_api_success_count
 
 logger = logging.getLogger(LOGGER_NAME)
 
@@ -132,9 +133,11 @@ class ImageGenerateAgent(BaseChatAgent):
                     number_of_images=1,
                 ),
             )
+            model_api_success_count.labels("image").inc()
             raw_image = response.generated_images[0].image.image_bytes
             image = PILImage.open(BytesIO(raw_image), formats=["PNG"])
         except Exception as e:
+            model_api_failure_count.labels("image").inc()
             logger.error(traceback.format_exc())
             logger.error(f"Error generate image, {e}")
 

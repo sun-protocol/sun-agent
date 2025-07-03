@@ -20,6 +20,7 @@ from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
 
 from sunagent_app._constants import LOGGER_NAME
 from sunagent_app.agents._markdown_utils import extract_json_from_string
+from sunagent_app.metrics import model_api_failure_count,model_api_success_count
 
 logger = logging.getLogger(LOGGER_NAME)
 
@@ -71,6 +72,7 @@ class ImageAnalysisAgent(BaseChatAgent):
                     ),
                 ],
             )
+            model_api_success_count.inc()
             extracted_json = extract_json_from_string(image_analysis_result.content)
             if extracted_json["score"] > 0.7:
                 logger.info(f"Image passed check with score {extracted_json["score"]}, {extracted_json["reason"]}")
@@ -83,6 +85,7 @@ class ImageAnalysisAgent(BaseChatAgent):
                     )
                 )
         except Exception as e:
+            model_api_failure_count.inc()
             logger.error(f"error analyzing the given image, {e}")
             return Response(
                 chat_message=TextMessage(content=f"error analyzing image: {e}. TERMINATE", source=self.name)
