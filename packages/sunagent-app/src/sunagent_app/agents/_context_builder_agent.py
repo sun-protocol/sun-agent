@@ -639,7 +639,7 @@ class ContextBuilderAgent:
         return None
 
     async def _normalize_tweet(self, tweet: Dict[str, Any]) -> Dict[str, Any]:
-        tweet["history"] = self.build_context(tweet)
+        tweet["history"] = await self.build_context(tweet)
         FILTER_FIELDS = [
             "id",
             "text",
