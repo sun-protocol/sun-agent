@@ -643,6 +643,7 @@ class ContextBuilderAgent:
         FILTER_FIELDS = [
             "id",
             "text",
+            "history",
             "author",
             "image_url",
             "public_metrics",
