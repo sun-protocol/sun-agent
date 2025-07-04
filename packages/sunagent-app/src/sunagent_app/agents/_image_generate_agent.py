@@ -6,6 +6,7 @@ from io import BytesIO
 from typing import (
     Optional,
     Sequence,
+    List,
 )
 
 from google.genai import Client, types
@@ -28,19 +29,6 @@ from ._markdown_utils import extract_json_from_string
 
 logger = logging.getLogger(LOGGER_NAME)
 
-image_styles = [
-    # Studio Ghibli style
-    "Studio Ghibli style, magical atmosphere, hand-drawn look, soft colors",
-    # Dynamic cartoon-style illustration
-    "dynamic cartoon-style illustration",
-    # 3D Papercraft / Kirigami Style
-    "papercraft, kirigami style, layered paper, paper quilling, diorama, made of paper, 3D paper art",
-    # Isometric Voxel Art
-    "isometric voxel art of [object], a tiny room made of voxels, pixel art, 3D pixel, clean edges, video game aesthetic",
-    # Claymation / Stop-Motion Style
-    "claymation character, stop-motion animation style, made of plasticine, fingerprint details, in the style of Aardman Animations",
-]
-
 class ImageGenerateAgent(BaseChatAgent):
     """An agent that generate an image based on the description in the tweet.
     An information extraction agent must be called before this agent.
@@ -58,6 +46,7 @@ class ImageGenerateAgent(BaseChatAgent):
         An information extraction agent must be called before this agent.
         """,
         system_message: str,
+        image_styles: List[str],
         image_model_name: str = "imagen-3.0-generate-002",
         image_path: str = "generated_image.png",
         width: int = 400,
@@ -65,6 +54,7 @@ class ImageGenerateAgent(BaseChatAgent):
     ) -> None:
         super().__init__(name=name, description=description)
         self.system_message = system_message
+        self.image_styles = image_styles
         self._image_model_name = image_model_name
         self._image_path = image_path
         self.image_model_client = image_model_client
@@ -111,7 +101,7 @@ class ImageGenerateAgent(BaseChatAgent):
                         return {
                             "last_tweet": reply_msg.get("last_tweet", ""),
                             "content": reply_msg.get("content", ""),
-                            "image_style": random.choice(image_styles)
+                            "image_style": random.choice(self.image_styles)
                         }
                 except Exception as e:
                     logger.error(f"Error extracting image metadata: {e}")
