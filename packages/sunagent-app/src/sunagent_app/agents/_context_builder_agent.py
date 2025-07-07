@@ -35,7 +35,7 @@ from tweepy import Response as TwitterResponse
 from tweepy.asynchronous import AsyncStreamingClient
 
 from .._constants import LOGGER_NAME
-from sunagent_app.metrics import tweet_success_count,tweet_failure_count,read_tweet_failure_count,read_tweet_success_count
+from sunagent_app.metrics import tweet_success_count,tweet_failure_count,read_tweet_failure_count,read_tweet_success_count,get_twitter_quota_limit,post_twitter_quota_limit
 
 logger = logging.getLogger(LOGGER_NAME)
 
@@ -300,6 +300,7 @@ class ContextBuilderAgent:
         if not self.quota["POST_TWEET"].acquire_quota():
             recover_time = self.quota["POST_TWEET"].recover_time()
             logger.error(f"POST_TWEET has no quota, recover_time={recover_time}")
+            post_twitter_quota_limit.labels(agent_id=self.agent_id).inc()
             await self.set_recover_time(recover_time)
             return 500, "POST_TWEET has no quota"
         await self.unset_recover_time()
@@ -422,6 +423,7 @@ class ContextBuilderAgent:
                     self.me = response.data
                 if not self.quota["HOME_TIMELINE"].acquire_quota():
                     logger.warning(f"HOME_TIMELINE no quota, recover_time={self.quota['HOME_TIMELINE'].recover_time()}")
+                    get_twitter_quota_limit.labels(agent_id=self.agent_id, action="HOME_TIMELINE").inc()
                     if self.cache:
                         self.cache.delete(cache_key)
                     break
@@ -488,6 +490,8 @@ class ContextBuilderAgent:
                         logger.warning(
                             f"MENTIONS_TIMELINE has no quota, recover_time={self.quota['MENTIONS_TIMELINE'].recover_time()}"
                         )
+                        get_twitter_quota_limit.labels(agent_id=self.agent_id, action="MENTIONS_TIMELINE").inc()
+                        
                         if self.cache:
                             self.cache.delete(cache_key)
                         next_token = None

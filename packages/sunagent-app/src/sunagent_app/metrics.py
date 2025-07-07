@@ -16,6 +16,9 @@ twitter_api_failure_count = Counter('twitter_api_failure_count', 'Number of Twit
 model_api_failure_count = Counter('model_api_failure_count', 'Number of Model API failures')
 model_api_success_count = Counter('model_api_success_count', 'Number of Model API success')
 
+post_twitter_quota_limit = Gauge('post_twitter_quota_limit', 'Twitter quota limit')
+get_twitter_quota_limit = Gauge('get_twitter_quota_limit', 'Twitter quota limit')
+
 # Twitter 账号封禁监控
 twitter_account_banned = Gauge('twitter_account_banned', 'Twitter account banned status (1 = banned, 0 = active)')
 
