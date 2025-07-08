@@ -240,7 +240,7 @@ class ContextBuilderAgent:
         twitter_client: TwitterClient,
         oauth: OAuth1,
         cache: Optional[CacheStore] = None,
-        max_depth: int = 1,
+        max_depth: int = 5,
         timeout: int = 30,
     ) -> None:
         self.agent_id = agent_id
