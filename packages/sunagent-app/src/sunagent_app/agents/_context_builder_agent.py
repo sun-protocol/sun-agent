@@ -35,6 +35,7 @@ from tweepy import Response as TwitterResponse
 from tweepy.asynchronous import AsyncStreamingClient
 
 from .._constants import LOGGER_NAME
+from sunagent_app.metrics import tweet_success_count,tweet_failure_count,read_tweet_failure_count,read_tweet_success_count,get_twitter_quota_limit,post_twitter_quota_limit
 
 logger = logging.getLogger(LOGGER_NAME)
 
@@ -299,6 +300,7 @@ class ContextBuilderAgent:
         if not self.quota["POST_TWEET"].acquire_quota():
             recover_time = self.quota["POST_TWEET"].recover_time()
             logger.error(f"POST_TWEET has no quota, recover_time={recover_time}")
+            post_twitter_quota_limit.labels(agent_id=self.agent_id).inc()
             await self.set_recover_time(recover_time)
             return 500, "POST_TWEET has no quota"
         await self.unset_recover_time()
@@ -308,10 +310,12 @@ class ContextBuilderAgent:
             if "in_reply_to_tweet_id" in kwargs:
                 self._mark_tweet_process(str(kwargs["in_reply_to_tweet_id"]))
             logger.info(f"create_tweet succeed. {response.data}")
+            tweet_success_count.inc(1)
             return 0, str(response.data["id"])
         except TweepyException as e:
             # we don't know whether fail posts costs twitter quota or not
             logger.error(f"create_tweet failed. {str(e)}")
+            tweet_failure_count.inc(1)
             try:
                 status_code = e.response.status_code
             except AttributeError:
@@ -319,6 +323,7 @@ class ContextBuilderAgent:
                 status_code = e.response.status
             return status_code, e.args[0]
         except Exception as e:
+            tweet_failure_count.inc(1)
             logger.error(f"create_tweet failed. {str(e)}")
             return 500, "Server Error"
 
@@ -418,6 +423,7 @@ class ContextBuilderAgent:
                     self.me = response.data
                 if not self.quota["HOME_TIMELINE"].acquire_quota():
                     logger.warning(f"HOME_TIMELINE no quota, recover_time={self.quota['HOME_TIMELINE'].recover_time()}")
+                    get_twitter_quota_limit.labels(agent_id=self.agent_id, action="HOME_TIMELINE").inc()
                     if self.cache:
                         self.cache.delete(cache_key)
                     break
@@ -434,6 +440,7 @@ class ContextBuilderAgent:
                     max_results=MAX_RESULTS,
                     user_auth=self.user_auth,
                 )
+
                 tweet_list, next_token = await self.on_twitter_response(
                     response,
                     cache_key=cache_key,
@@ -443,6 +450,7 @@ class ContextBuilderAgent:
                 tweets.extend(tweet_list)
                 return json.dumps(tweets, ensure_ascii=False, default=str)
             except Exception as e:
+                read_tweet_failure_count.inc(1)
                 logger.error(traceback.format_exc())
                 logger.error(f"error get_home_timeline_with_context(attempt {attempt+1}): {str(e)}")
                 if not isinstance(e, TwitterServerError):
@@ -482,6 +490,8 @@ class ContextBuilderAgent:
                         logger.warning(
                             f"MENTIONS_TIMELINE has no quota, recover_time={self.quota['MENTIONS_TIMELINE'].recover_time()}"
                         )
+                        get_twitter_quota_limit.labels(agent_id=self.agent_id, action="MENTIONS_TIMELINE").inc()
+                        
                         if self.cache:
                             self.cache.delete(cache_key)
                         next_token = None
@@ -508,6 +518,7 @@ class ContextBuilderAgent:
                     tweets.extend(tweet_list)
                     break
                 except Exception as e:
+                    read_tweet_failure_count.inc(1)
                     logger.error(traceback.format_exc())
                     logger.error(f"error get_mentions_with_context(attempt {attempt+1}): {str(e)}")
                     if not isinstance(e, TwitterServerError):
@@ -557,6 +568,7 @@ class ContextBuilderAgent:
             next_token = None
         elif self.cache and "newest_id" in response.meta:
             self.cache.set(cache_key, str(response.meta["newest_id"]))
+        read_tweet_success_count.inc(len(tweets))
         return tweets, next_token
 
     async def build_context(self, tweet: Dict[str, Any]) -> str:
@@ -785,14 +797,7 @@ class ContextBuilderAgent:
             if user and "affiliation" in user and "description" in user["affiliation"]
             else False
         )
-
-        tweet["mentions_me"] = False
-        if "entities" in tweet and "mentions" in tweet["entities"]:
-            for mention in tweet["entities"]["mentions"]:
-                if mention["id"] == self.me.data["id"]:
-                    tweet["mentions_me"] = True
-                    break
-
+        tweet["mentions_me"] = "in_reply_to_user_id" in tweet and tweet["in_reply_to_user_id"] == self.me.data["id"]
         text = tweet["text"]
         if "display_text_range" in tweet:
             display_text_range: List[int] = tweet["display_text_range"]
