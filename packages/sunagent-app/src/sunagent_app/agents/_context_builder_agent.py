@@ -44,7 +44,7 @@ CONVERSATION_KEY_PREFIX = "C:"
 FREQ_KEY_PREFIX = "F:"
 HOME_TIMELINE_ID = "last_home_timeline"
 MENTIONS_TIMELINE_ID = "last_mentions_timeline"
-MAX_RESULTS = 20
+MAX_RESULTS = 50
 # fetch tweet data fields
 TWEET_FIELDS = [
     "article",
@@ -418,8 +418,6 @@ class ContextBuilderAgent:
                     self.me = response.data
                 if not self.quota["HOME_TIMELINE"].acquire_quota():
                     logger.warning(f"HOME_TIMELINE no quota, recover_time={self.quota['HOME_TIMELINE'].recover_time()}")
-                    if self.cache:
-                        self.cache.delete(cache_key)
                     break
                 since_id = self.cache.get(cache_key) if self.cache else None
                 response = self.twitter.get_home_timeline(
@@ -482,8 +480,6 @@ class ContextBuilderAgent:
                         logger.warning(
                             f"MENTIONS_TIMELINE has no quota, recover_time={self.quota['MENTIONS_TIMELINE'].recover_time()}"
                         )
-                        if self.cache:
-                            self.cache.delete(cache_key)
                         next_token = None
                         break
                     since_id = self.cache.get(cache_key) if self.cache else None
