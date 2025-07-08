@@ -477,62 +477,61 @@ class ContextBuilderAgent:
             if self.cache:
                 self.cache.delete(cache_key)
             return "[]"
-        while True:
-            for attempt in range(self.retry_limit):
-                try:
-                    if self.me is None:
-                        response = self.twitter.get_me(
-                            user_auth=self.user_auth,
-                            user_fields=USER_FIELDS,
-                        )
-                        self.me = response.data
-                    if not self.quota["MENTIONS_TIMELINE"].acquire_quota():
-                        logger.warning(
-                            f"MENTIONS_TIMELINE has no quota, recover_time={self.quota['MENTIONS_TIMELINE'].recover_time()}"
-                        )
-                        break
-                    since_id = self.cache.get(cache_key) if self.cache else None
-                    newest_id = None
-                    logger.info(f"get_mentions_with_context since : {since_id}")
-                    while True:
-                        # get page of tweets from since_id
-                        response = self.twitter.get_users_mentions(
-                            id=self.me.id,
-                            tweet_fields=TWEET_FIELDS,
-                            expansions=EXPANSIONS,
-                            media_fields=MEDIA_FIELDS,
-                            poll_fields=POLL_FIELDS,
-                            user_fields=USER_FIELDS,
-                            place_fields=PLACE_FIELDS,
-                            since_id=int(since_id) if since_id else None,
-                            max_results=MAX_RESULTS,
-                            pagination_token=next_token,
-                            user_auth=self.user_auth,
-                        )
-                        if not newest_id and "newest_id" in response.meta:
-                            newest_id = response.meta["newest_id"]
-                        tweet_list, next_token = await self.on_twitter_response(response, filter_func=filter_tweet)
-                        if len(tweet_list) > 0:
-                            tweets.extend(tweet_list)
-                        if not next_token:
-                            # sort by time
-                            tweets.reverse()
-                            # update since_id
-                            if self.cache:
-                                if not newest_id:
-                                    newest_id = tweets[-1]["id"]
-                                self.cache.set(cache_key, str(newest_id))
-                                logger.info(f"get_mentions_with_context newest_id: {newest_id}")
-                            # no mentions left
-                            break
-                    # success
+        for attempt in range(self.retry_limit):
+            try:
+                if self.me is None:
+                    response = self.twitter.get_me(
+                        user_auth=self.user_auth,
+                        user_fields=USER_FIELDS,
+                    )
+                    self.me = response.data
+                if not self.quota["MENTIONS_TIMELINE"].acquire_quota():
+                    logger.warning(
+                        f"MENTIONS_TIMELINE has no quota, recover_time={self.quota['MENTIONS_TIMELINE'].recover_time()}"
+                    )
                     break
-                except Exception as e:
-                    logger.error(traceback.format_exc())
-                    logger.error(f"error get_mentions_with_context(attempt {attempt+1}): {str(e)}")
-                    if not isinstance(e, TwitterServerError):
+                since_id = self.cache.get(cache_key) if self.cache else None
+                newest_id = None
+                logger.info(f"get_mentions_with_context since : {since_id}")
+                while True:
+                    # get page of tweets from since_id
+                    response = self.twitter.get_users_mentions(
+                        id=self.me.id,
+                        tweet_fields=TWEET_FIELDS,
+                        expansions=EXPANSIONS,
+                        media_fields=MEDIA_FIELDS,
+                        poll_fields=POLL_FIELDS,
+                        user_fields=USER_FIELDS,
+                        place_fields=PLACE_FIELDS,
+                        since_id=int(since_id) if since_id else None,
+                        max_results=MAX_RESULTS,
+                        pagination_token=next_token,
+                        user_auth=self.user_auth,
+                    )
+                    if not newest_id and "newest_id" in response.meta:
+                        newest_id = response.meta["newest_id"]
+                    tweet_list, next_token = await self.on_twitter_response(response, filter_func=filter_tweet)
+                    if len(tweet_list) > 0:
+                        tweets.extend(tweet_list)
+                    if not next_token:
+                        # sort by time
+                        tweets.reverse()
+                        # update since_id
+                        if self.cache:
+                            if not newest_id:
+                                newest_id = tweets[-1]["id"]
+                            self.cache.set(cache_key, str(newest_id))
+                            logger.info(f"get_mentions_with_context newest_id: {newest_id}")
+                        # no mentions left
                         break
-                await asyncio.sleep(2**attempt)  # 指数退避
+                # success
+                break
+            except Exception as e:
+                logger.error(traceback.format_exc())
+                logger.error(f"error get_mentions_with_context(attempt {attempt+1}): {str(e)}")
+                if not isinstance(e, TwitterServerError):
+                    break
+            await asyncio.sleep(2**attempt)  # 指数退避
         return json.dumps(tweets, ensure_ascii=False, default=str)
 
     async def on_twitter_response(
