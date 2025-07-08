@@ -534,7 +534,7 @@ class ContextBuilderAgent:
             is_processed = await self._check_tweet_process(tweet["id"])
             has_processed = has_processed or is_processed
             conversation_id = tweet["id"]
-            host_tweet = await self.get_host_tweet(conversation_id)
+            host_tweet = await self.get_tweet(conversation_id)
             freq = await self._get_freq(tweet)
             if (
                 tweet["author_id"] == self.me.data["id"]
@@ -589,7 +589,7 @@ class ContextBuilderAgent:
             conversation.append(tweet)
             return True
 
-        parent = await self.get_host_tweet(parent_id)
+        parent = await self.get_tweet(parent_id)
         if not parent:
             conversation.append(tweet)
             return False
@@ -891,7 +891,7 @@ class ContextBuilderAgent:
                 logger.error(f"error _get_cached_tweet: {e}")
         return None
 
-    async def get_host_tweet(self, tweet_id):
+    async def get_tweet(self, tweet_id):
         tweet = self._get_cached_tweet(tweet_id)
         if tweet:
             return tweet
