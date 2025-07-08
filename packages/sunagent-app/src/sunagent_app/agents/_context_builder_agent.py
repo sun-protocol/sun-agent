@@ -480,7 +480,6 @@ class ContextBuilderAgent:
                         logger.warning(
                             f"MENTIONS_TIMELINE has no quota, recover_time={self.quota['MENTIONS_TIMELINE'].recover_time()}"
                         )
-                        next_token = None
                         break
                     since_id = self.cache.get(cache_key) if self.cache else None
                     response = self.twitter.get_users_mentions(
@@ -535,7 +534,7 @@ class ContextBuilderAgent:
             is_processed = await self._check_tweet_process(tweet["id"])
             has_processed = has_processed or is_processed
             conversation_id = tweet["id"]
-            host_author = await self.get_host_author(conversation_id)
+            host_tweet = await self.get_host_tweet(conversation_id)
             freq = await self._get_freq(tweet)
             if (
                 tweet["author_id"] == self.me.data["id"]
@@ -543,7 +542,7 @@ class ContextBuilderAgent:
                 or is_processed
                 or not filter_func(tweet)
                 or (freq >= self.reply_freq_limit
-                    and self.white_user_ids.count(int(host_author)) == 0)
+                    and self.white_user_ids.count(int(host_tweet["author_id"])) == 0)
             ):
                 logger.info(f"skip tweet {tweet['id']} freq {freq}")
                 continue
@@ -590,11 +589,7 @@ class ContextBuilderAgent:
             conversation.append(tweet)
             return True
 
-        parent = await self._get_cached_tweet(parent_id)
-        if not parent:
-            parent = await self._fetch_tweet_with_retry(parent_id)
-            if parent:
-                await self._cache_tweets([parent])
+        parent = await self.get_host_tweet(parent_id)
         if not parent:
             conversation.append(tweet)
             return False
@@ -896,13 +891,14 @@ class ContextBuilderAgent:
                 logger.error(f"error _get_cached_tweet: {e}")
         return None
 
-    async def get_host_author(self, tweet_id) -> Optional[str]:
+    async def get_host_tweet(self, tweet_id):
         tweet = self._get_cached_tweet(tweet_id)
-        if not tweet:
-            tweet = await self._fetch_tweet_with_retry(tweet_id)
         if tweet:
-            return str(tweet["author_id"])
-        return ""
+            return tweet
+        tweet = await self._fetch_tweet_with_retry(tweet_id)
+        if tweet:
+            await self._cache_tweets([tweet])
+            return tweet
 
     async def _cache_tweets(self, tweets: List[Dict[str, Any]]) -> None:
         if len(tweets) == 0 or self.cache is None:
