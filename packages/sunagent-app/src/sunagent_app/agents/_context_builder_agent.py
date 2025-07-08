@@ -44,7 +44,7 @@ CONVERSATION_KEY_PREFIX = "C:"
 FREQ_KEY_PREFIX = "F:"
 HOME_TIMELINE_ID = "last_home_timeline"
 MENTIONS_TIMELINE_ID = "last_mentions_timeline"
-MAX_RESULTS = 50
+MAX_RESULTS = 20
 # fetch tweet data fields
 TWEET_FIELDS = [
     "article",
