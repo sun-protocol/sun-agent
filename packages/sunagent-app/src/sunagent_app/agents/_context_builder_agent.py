@@ -535,7 +535,6 @@ class ContextBuilderAgent:
             has_processed = has_processed or is_processed
             conversation_id = tweet["conversation_id"]
             host_tweet = await self.get_tweet(conversation_id)
-            host_author = "0" if not host_tweet else host_tweet["author_id"]
             freq = await self._get_freq(tweet)
             if (
                 tweet["author_id"] == self.me.data["id"]
@@ -543,7 +542,8 @@ class ContextBuilderAgent:
                 or is_processed
                 or not filter_func(tweet)
                 or (freq >= self.reply_freq_limit
-                    and self.white_user_ids.count(int(host_author)) == 0)
+                    and host_tweet
+                    and self.white_user_ids.count(int(host_tweet["author_id"])) == 0)
             ):
                 logger.info(f"skip tweet {tweet['id']} freq {freq}")
                 continue
