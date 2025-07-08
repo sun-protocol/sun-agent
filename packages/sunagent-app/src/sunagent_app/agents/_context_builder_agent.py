@@ -533,8 +533,9 @@ class ContextBuilderAgent:
         for tweet in all_tweets:
             is_processed = await self._check_tweet_process(tweet["id"])
             has_processed = has_processed or is_processed
-            conversation_id = tweet["id"]
+            conversation_id = tweet["conversation_id"]
             host_tweet = await self.get_tweet(conversation_id)
+            host_author = "0" if not host_tweet else host_tweet["author_id"]
             freq = await self._get_freq(tweet)
             if (
                 tweet["author_id"] == self.me.data["id"]
@@ -542,7 +543,7 @@ class ContextBuilderAgent:
                 or is_processed
                 or not filter_func(tweet)
                 or (freq >= self.reply_freq_limit
-                    and self.white_user_ids.count(int(host_tweet["author_id"])) == 0)
+                    and self.white_user_ids.count(int(host_author)) == 0)
             ):
                 logger.info(f"skip tweet {tweet['id']} freq {freq}")
                 continue
@@ -892,13 +893,14 @@ class ContextBuilderAgent:
         return None
 
     async def get_tweet(self, tweet_id):
-        tweet = self._get_cached_tweet(tweet_id)
+        tweet = await self._get_cached_tweet(tweet_id)
         if tweet:
             return tweet
         tweet = await self._fetch_tweet_with_retry(tweet_id)
         if tweet:
             await self._cache_tweets([tweet])
             return tweet
+        return None
 
     async def _cache_tweets(self, tweets: List[Dict[str, Any]]) -> None:
         if len(tweets) == 0 or self.cache is None:
