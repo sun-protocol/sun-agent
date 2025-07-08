@@ -44,7 +44,7 @@ CONVERSATION_KEY_PREFIX = "C:"
 FREQ_KEY_PREFIX = "F:"
 HOME_TIMELINE_ID = "last_home_timeline"
 MENTIONS_TIMELINE_ID = "last_mentions_timeline"
-MAX_RESULTS = 20
+MAX_RESULTS = 100
 # fetch tweet data fields
 TWEET_FIELDS = [
     "article",
@@ -240,7 +240,7 @@ class ContextBuilderAgent:
         twitter_client: TwitterClient,
         oauth: OAuth1,
         cache: Optional[CacheStore] = None,
-        max_depth: int = 5,
+        max_depth: int = 1,
         timeout: int = 30,
     ) -> None:
         self.agent_id = agent_id
