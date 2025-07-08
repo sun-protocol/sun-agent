@@ -552,10 +552,7 @@ class ContextBuilderAgent:
             await self._mark_tweet_process(tweet["id"])
             tweet = await self._normalize_tweet(tweet)
             tweets.append(tweet)
-        if self.cache and not has_processed and response.meta["result_count"] == MAX_RESULTS:
-            self.cache.delete(cache_key)
-            next_token = None
-        elif self.cache and "newest_id" in response.meta:
+        if self.cache and "newest_id" in response.meta:
             self.cache.set(cache_key, str(response.meta["newest_id"]))
         return tweets, next_token
 
