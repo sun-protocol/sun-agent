@@ -44,7 +44,6 @@ CONVERSATION_KEY_PREFIX = "C:"
 FREQ_KEY_PREFIX = "F:"
 HOME_TIMELINE_ID = "last_home_timeline"
 MENTIONS_TIMELINE_ID = "last_mentions_timeline"
-MAX_RESULTS = 100
 # fetch tweet data fields
 TWEET_FIELDS = [
     "article",
@@ -264,18 +263,7 @@ class ContextBuilderAgent:
         logger.error(f"block_user_ids: {self.block_user_ids}")
         self.white_user_ids = json.loads(os.getenv("MENTIONS_WHITE_USER_ID", "[]"))
         self.reply_freq_limit = int(os.getenv("MAX_REPLY_COUNT", "5"))
-
-    def _remove_recover_time(self, description: str) -> (str, int):
-        pattern = re.compile(r"(\s*Status: Off\s*Recovery time: \d+-\d+-\d+ \d+:\d+ UTC\+8\s*)")
-        matches = pattern.findall(description)
-        old_time: int = 0
-        timezone = pytz.FixedOffset(480)
-        for match in matches:
-            description = description.replace(match, "")
-            t = match.split()
-            recover_time = timezone.localize(datetime.strptime(" ".join([t[-3], t[-2]]), "%Y-%m-%d %H:%M"))
-            old_time = max(old_time, int(recover_time.timestamp()))
-        return description, old_time
+        self.max_results = int(os.getenv("MAX_RESULTS", "100"))
 
     async def unset_recover_time(self) -> (int, str):
         if self.recover_time is None:
@@ -346,31 +334,6 @@ class ContextBuilderAgent:
         else:
             return "failed to post tweet."
 
-    async def sampling_quote_tweet(self, reply_to: str, sampling_quote: bool, content: str) -> str:
-        """
-        reply_to: string, the tweet ID of that reply to, empty string for orignal post
-        sampling_quote: bool, whether quote this tweet or not
-        content: string, the content to post
-        """
-        if not self.quote_tweet_or_not(reply_to, sampling_quote):
-            # Do not quote this tweet, just reply it
-            return await self.reply_tweet(reply_to, content)
-        args: Dict[str, Any] = {"text": content, "quote_tweet_id": int(reply_to)}
-        code, msg = await self.create_tweet(args)
-        if code == 0:
-            return f"""
-            new tweet quoted successfully:
-            ```json
-            {{
-                "id": "{msg}",
-                "content": "{content}"
-            }}
-            ```
-            """
-        else:
-            self.quota["SAMPLING_QUOTE_TWEET"].rollback()
-            return "failed to quote tweet."
-
     async def subscribe(self, mention_stream: MentionStream) -> bool:
         try:
             rule = StreamRule(tag=f"{self.agent_id}:{MENTIONS_TIMELINE_ID}", value=f"@{self.me.username} -is:retweet")
@@ -431,7 +394,7 @@ class ContextBuilderAgent:
                     place_fields=PLACE_FIELDS,
                     exclude=["replies", "retweets"],
                     since_id=int(since_id) if since_id else None,
-                    max_results=MAX_RESULTS,
+                    max_results=self.max_results,
                     user_auth=self.user_auth,
                 )
                 if not newest_id and "newest_id" in response.meta:
@@ -504,7 +467,7 @@ class ContextBuilderAgent:
                         user_fields=USER_FIELDS,
                         place_fields=PLACE_FIELDS,
                         since_id=int(since_id) if since_id else None,
-                        max_results=MAX_RESULTS,
+                        max_results=self.max_results,
                         pagination_token=next_token,
                         user_auth=self.user_auth,
                     )
@@ -930,33 +893,3 @@ class ContextBuilderAgent:
                 )
             except Exception as e:
                 logger.error(f"error _cache_tweet[{tweet_id}]: {e}")
-
-    def _check_quote_time(self) -> bool:
-        timezone = pytz.FixedOffset(480)
-        now = datetime.now(timezone)
-        return now.hour >= 10 and now.hour < 23
-
-    def _quote_sampling(self) -> bool:
-        # 20点以后quota还没用完，加速消耗
-        timezone = pytz.FixedOffset(480)
-        now = datetime.now(timezone)
-        if now.hour >= 20:
-            return True
-        return random.random() >= 0.5
-
-    def quote_tweet_or_not(self, reply_to: str, sampling_quote: bool) -> bool:
-        """
-        determine whether to quote given tweet or not
-        Params:
-            reply_to: string, the tweet ID of that reply to, empty string for orignal post
-            sampling_quote: bool, whether to given tweet can be quoted
-        Return:
-            bool: whether to quote given tweet
-        """
-        return (
-            sampling_quote
-            and len(reply_to) != 0
-            and self._check_quote_time()
-            and self._quote_sampling()
-            and self.quota["SAMPLING_QUOTE_TWEET"].acquire_quota()
-        )
