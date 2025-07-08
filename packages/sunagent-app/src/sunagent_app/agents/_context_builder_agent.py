@@ -18,8 +18,8 @@ from typing import (
 
 import pytz
 import requests
-from requests_oauthlib import OAuth1
 from autogen_core import CacheStore
+from requests_oauthlib import OAuth1
 from tweepy import Client as TwitterClient
 from tweepy import (
     Media,
@@ -420,6 +420,8 @@ class ContextBuilderAgent:
                     logger.warning(f"HOME_TIMELINE no quota, recover_time={self.quota['HOME_TIMELINE'].recover_time()}")
                     break
                 since_id = self.cache.get(cache_key) if self.cache else None
+                newest_id = None
+                logger.info(f"get_home_timeline_with_context since : {since_id}")
                 response = self.twitter.get_home_timeline(
                     tweet_fields=TWEET_FIELDS,
                     expansions=EXPANSIONS,
@@ -432,13 +434,21 @@ class ContextBuilderAgent:
                     max_results=MAX_RESULTS,
                     user_auth=self.user_auth,
                 )
+                if not newest_id and "newest_id" in response.meta:
+                    newest_id = response.meta["newest_id"]
                 tweet_list, next_token = await self.on_twitter_response(
                     response,
-                    cache_key=cache_key,
                 )
-                if len(tweet_list) == 0:
-                    break
-                tweets.extend(tweet_list)
+                if len(tweet_list) > 0:
+                    tweets.extend(tweet_list)
+                # sort by time
+                tweets.reverse()
+                # update since_id
+                if self.cache:
+                    if not newest_id:
+                        newest_id = tweets[-1]["id"]
+                    self.cache.set(cache_key, str(newest_id))
+                    logger.info(f"get_home_timeline_with_context newest_id: {newest_id}")
                 return json.dumps(tweets, ensure_ascii=False, default=str)
             except Exception as e:
                 logger.error(traceback.format_exc())
@@ -482,43 +492,52 @@ class ContextBuilderAgent:
                         )
                         break
                     since_id = self.cache.get(cache_key) if self.cache else None
+                    newest_id = None
                     logger.info(f"get_mentions_with_context since : {since_id}")
-                    response = self.twitter.get_users_mentions(
-                        id=self.me.id,
-                        tweet_fields=TWEET_FIELDS,
-                        expansions=EXPANSIONS,
-                        media_fields=MEDIA_FIELDS,
-                        poll_fields=POLL_FIELDS,
-                        user_fields=USER_FIELDS,
-                        place_fields=PLACE_FIELDS,
-                        since_id=int(since_id) if since_id else None,
-                        max_results=MAX_RESULTS,
-                        pagination_token=next_token,
-                        user_auth=self.user_auth,
-                    )
-                    tweet_list, next_token = await self.on_twitter_response(
-                        response, cache_key=cache_key, filter_func=filter_tweet
-                    )
-                    if len(tweet_list) == 0:
-                        break
-                    tweets.extend(tweet_list)
+                    while True:
+                        # get page of tweets from since_id
+                        response = self.twitter.get_users_mentions(
+                            id=self.me.id,
+                            tweet_fields=TWEET_FIELDS,
+                            expansions=EXPANSIONS,
+                            media_fields=MEDIA_FIELDS,
+                            poll_fields=POLL_FIELDS,
+                            user_fields=USER_FIELDS,
+                            place_fields=PLACE_FIELDS,
+                            since_id=int(since_id) if since_id else None,
+                            max_results=MAX_RESULTS,
+                            pagination_token=next_token,
+                            user_auth=self.user_auth,
+                        )
+                        if not newest_id and "newest_id" in response.meta:
+                            newest_id = response.meta["newest_id"]
+                        tweet_list, next_token = await self.on_twitter_response(response, filter_func=filter_tweet)
+                        if len(tweet_list) > 0:
+                            tweets.extend(tweet_list)
+                        if not next_token:
+                            # sort by time
+                            tweets.reverse()
+                            # update since_id
+                            if self.cache:
+                                if not newest_id:
+                                    newest_id = tweets[-1]["id"]
+                                self.cache.set(cache_key, str(newest_id))
+                                logger.info(f"get_mentions_with_context newest_id: {newest_id}")
+                            # no mentions left
+                            break
+                    # success
                     break
                 except Exception as e:
                     logger.error(traceback.format_exc())
                     logger.error(f"error get_mentions_with_context(attempt {attempt+1}): {str(e)}")
                     if not isinstance(e, TwitterServerError):
-                        next_token = None
                         break
                 await asyncio.sleep(2**attempt)  # 指数退避
-            if not next_token:
-                # no mentions left
-                break
         return json.dumps(tweets, ensure_ascii=False, default=str)
 
     async def on_twitter_response(
         self,
         response: Response | StreamResponse,
-        cache_key: str,
         filter_func: Callable[[Dict[str, Any]], bool] = (lambda x: True),
     ) -> (List[Dict[str, Any]], Optional[int]):
         tweets: List[Dict[str, Any]] = []
@@ -544,9 +563,11 @@ class ContextBuilderAgent:
                 or self.block_user_ids.count(int(tweet["author_id"])) != 0
                 or is_processed
                 or not filter_func(tweet)
-                or (freq >= self.reply_freq_limit
+                or (
+                    freq >= self.reply_freq_limit
                     and host_tweet
-                    and self.white_user_ids.count(int(host_tweet["author_id"])) == 0)
+                    and self.white_user_ids.count(int(host_tweet["author_id"])) == 0
+                )
             ):
                 logger.info(f"skip tweet {tweet['id']} freq {freq}")
                 continue
@@ -554,8 +575,6 @@ class ContextBuilderAgent:
             await self._mark_tweet_process(tweet["id"])
             tweet = await self._normalize_tweet(tweet)
             tweets.append(tweet)
-        if self.cache and "newest_id" in response.meta:
-            self.cache.set(cache_key, str(response.meta["newest_id"]))
         return tweets, next_token
 
     async def build_context(self, tweet: Dict[str, Any]) -> str:
@@ -745,9 +764,7 @@ class ContextBuilderAgent:
             # Step2: Append media chunk of bytes using the APPEND command
             upload_url = f"https://api.twitter.com/2/media/upload/{media_id}/append"
 
-            request_data = {
-                "segment_index": 0
-            }
+            request_data = {"segment_index": 0}
 
             files = {
                 "media": image_bytes,
@@ -858,9 +875,7 @@ class ContextBuilderAgent:
             return
         freq = await self._get_freq(tweet)
         try:
-            self.cache.set(
-                f"{self.agent_id}:{FREQ_KEY_PREFIX}{tweet['conversation_id']}", str(freq + 1)
-            )
+            self.cache.set(f"{self.agent_id}:{FREQ_KEY_PREFIX}{tweet['conversation_id']}", str(freq + 1))
         except Exception:
             pass
 
