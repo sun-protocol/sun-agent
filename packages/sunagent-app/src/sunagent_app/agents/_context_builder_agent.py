@@ -482,6 +482,7 @@ class ContextBuilderAgent:
                         )
                         break
                     since_id = self.cache.get(cache_key) if self.cache else None
+                    logger.info(f"get_mentions_with_context since : {since_id}")
                     response = self.twitter.get_users_mentions(
                         id=self.me.id,
                         tweet_fields=TWEET_FIELDS,
@@ -528,6 +529,8 @@ class ContextBuilderAgent:
         users: Dict[str, User] = self._build_users(response.includes)
         medias: Dict[str, Media] = self._build_medias(response.includes)
         all_tweets = self._get_all_tweets(response, users, medias)
+        if len(all_tweets) > 0:
+            logger.info(f"first tweet id {all_tweets[0]["id"]}")
         await self._cache_tweets(all_tweets)
         has_processed = False
         for tweet in all_tweets:
