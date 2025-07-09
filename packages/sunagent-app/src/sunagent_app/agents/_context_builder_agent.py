@@ -481,9 +481,10 @@ class ContextBuilderAgent:
                         tweets.reverse()
                         # update since_id
                         if self.cache:
-                            if not newest_id:
+                            if not newest_id and len(tweets) > 0:
                                 newest_id = tweets[-1]["id"]
-                            self.cache.set(cache_key, str(newest_id))
+                            if newest_id:
+                                self.cache.set(cache_key, str(newest_id))
                             logger.info(f"get_mentions_with_context newest_id: {newest_id}")
                         # no mentions left
                         break
@@ -759,14 +760,7 @@ class ContextBuilderAgent:
             if user and "affiliation" in user and "description" in user["affiliation"]
             else False
         )
-
-        tweet["mentions_me"] = False
-        if "entities" in tweet and "mentions" in tweet["entities"]:
-            for mention in tweet["entities"]["mentions"]:
-                if mention["id"] == self.me.data["id"]:
-                    tweet["mentions_me"] = True
-                    break
-
+        tweet["mentions_me"] = "in_reply_to_user_id" in tweet and tweet["in_reply_to_user_id"] == self.me.data["id"]
         text = tweet["text"]
         if "display_text_range" in tweet:
             display_text_range: List[int] = tweet["display_text_range"]
