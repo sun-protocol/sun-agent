@@ -408,9 +408,10 @@ class ContextBuilderAgent:
                 tweets.reverse()
                 # update since_id
                 if self.cache:
-                    if not newest_id:
+                    if not newest_id and len(tweets) > 0:
                         newest_id = tweets[-1]["id"]
-                    self.cache.set(cache_key, str(newest_id))
+                    if newest_id:
+                        self.cache.set(cache_key, str(newest_id))
                     logger.info(f"get_home_timeline_with_context newest_id: {newest_id}")
                 return json.dumps(tweets, ensure_ascii=False, default=str)
             except Exception as e:
