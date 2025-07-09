@@ -476,7 +476,7 @@ class ContextBuilderAgent:
                     tweet_list, next_token = await self.on_twitter_response(response, filter_func=filter_tweet)
                     if len(tweet_list) > 0:
                         tweets.extend(tweet_list)
-                    if not next_token:
+                    if not since_id or not next_token:
                         # sort by time
                         tweets.reverse()
                         # update since_id
