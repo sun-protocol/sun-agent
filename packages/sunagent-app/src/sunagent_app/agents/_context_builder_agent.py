@@ -283,6 +283,14 @@ class ContextBuilderAgent:
         self.recover_time = None
         return 0, str(self.recover_time)
 
+    async def init_me(self):
+        if self.me is None:
+            response = self.twitter.get_me(
+                user_auth=self.user_auth,
+                user_fields=USER_FIELDS,
+            )
+            self.me = response.data
+
     async def set_recover_time(self, recover_time: int) -> (int, str):
         if self.recover_time == recover_time:
             return 0, str(self.recover_time)
