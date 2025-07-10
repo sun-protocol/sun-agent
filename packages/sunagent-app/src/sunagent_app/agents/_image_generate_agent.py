@@ -25,9 +25,9 @@ from google.genai import Client, types
 from PIL import Image as PILImage
 
 from sunagent_app._constants import LOGGER_NAME
+from sunagent_app.metrics import model_api_failure_count, model_api_success_count
 
 from ._markdown_utils import extract_json_from_string
-from sunagent_app.metrics import model_api_failure_count,model_api_success_count
 
 logger = logging.getLogger(LOGGER_NAME)
 

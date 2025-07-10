@@ -18,9 +18,10 @@ from autogen_core.models import (
     UserMessage,
 )
 
+from sunagent_app.metrics import model_api_failure_count, model_api_success_count
+
 from .._constants import LOGGER_NAME
 from ._markdown_utils import extract_markdown_json_blocks, extract_tweets_from_markdown_json_blocks
-from sunagent_app.metrics import model_api_failure_count,model_api_success_count
 
 logger = logging.getLogger(LOGGER_NAME)
 
