@@ -4,8 +4,8 @@ api_requests_total = Counter('api_requests_total', 'Total API requests', ['endpo
 api_request_duration = Histogram('api_request_duration_seconds', 'API request duration', ['endpoint'])
 
 # 发推监控
-tweet_success_count = Counter('tweet_success_count', 'Number of successful tweets')
-tweet_failure_count = Counter('tweet_failure_count', 'Number of failed tweets')
+post_tweet_success_count = Counter('post_tweet_success_count', 'Number of successful post tweets')
+post_tweet_failure_count = Counter('post_tweet_failure_count', 'Number of failed post tweets')
 
 # 读推监控
 read_tweet_success_count = Counter('read_tweet_success_count', 'Number of successful read tweets')

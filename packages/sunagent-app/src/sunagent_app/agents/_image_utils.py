@@ -3,9 +3,9 @@ import io
 import logging
 import re
 
-from openpyxl.drawing.image import PILImage
 from autogen_core import Image
 from autogen_core.models import UserMessage
+from openpyxl.drawing.image import PILImage
 
 from .._constants import LOGGER_NAME
 from ._http_utils import fetch_url

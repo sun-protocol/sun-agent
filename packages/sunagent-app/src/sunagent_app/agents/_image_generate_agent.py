@@ -4,13 +4,11 @@ import random
 import traceback
 from io import BytesIO
 from typing import (
+    List,
     Optional,
     Sequence,
-    List,
 )
 
-from google.genai import Client, types
-from PIL import Image as PILImage
 from autogen_agentchat.agents import BaseChatAgent
 from autogen_agentchat.base import Response
 from autogen_agentchat.messages import (
@@ -23,12 +21,16 @@ from autogen_core.models import (
     UserMessage,
 )
 from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
+from google.genai import Client, types
+from PIL import Image as PILImage
 
 from sunagent_app._constants import LOGGER_NAME
+
 from ._markdown_utils import extract_json_from_string
 from sunagent_app.metrics import model_api_failure_count,model_api_success_count
 
 logger = logging.getLogger(LOGGER_NAME)
+
 
 class ImageGenerateAgent(BaseChatAgent):
     """An agent that generate an image based on the description in the tweet.
@@ -102,7 +104,7 @@ class ImageGenerateAgent(BaseChatAgent):
                         return {
                             "last_tweet": reply_msg.get("last_tweet", ""),
                             "content": reply_msg.get("content", ""),
-                            "image_style": random.choice(self.image_styles)
+                            "image_style": random.choice(self.image_styles),
                         }
                 except Exception as e:
                     logger.error(f"Error extracting image metadata: {e}")
@@ -115,14 +117,16 @@ class ImageGenerateAgent(BaseChatAgent):
             prompt_text = self.system_message.format(
                 last_tweet=image_metadata["last_tweet"],
                 content=image_metadata["content"],
-                image_style=image_metadata["image_style"]
+                image_style=image_metadata["image_style"],
             )
-            response = await self.text_model_client.create([
-                UserMessage(
-                    content=prompt_text,
-                    source="user",
-                ),
-            ])
+            response = await self.text_model_client.create(
+                [
+                    UserMessage(
+                        content=prompt_text,
+                        source="user",
+                    ),
+                ]
+            )
             return response.content
         except Exception as e:
             logger.error(f"Error generating image prompt: {e}")
