@@ -418,6 +418,7 @@ class ContextBuilderAgent:
                 )
                 if len(tweet_list) > 0:
                     tweets.extend(tweet_list)
+                    read_tweet_success_count.inc(len(tweets))
                 # sort by time
                 tweets.reverse()
                 # update since_id
@@ -427,7 +428,6 @@ class ContextBuilderAgent:
                     if newest_id:
                         self.cache.set(cache_key, str(newest_id))
                     logger.info(f"get_home_timeline_with_context newest_id: {newest_id}")
-                read_tweet_success_count.inc()
                 return json.dumps(tweets, ensure_ascii=False, default=str)
             except Exception as e:
                 read_tweet_failure_count.inc()
@@ -494,7 +494,7 @@ class ContextBuilderAgent:
                     tweet_list, next_token = await self.on_twitter_response(response, filter_func=filter_tweet)
                     if len(tweet_list) > 0:
                         tweets.extend(tweet_list)
-                        read_tweet_success_count.inc()
+                        read_tweet_success_count.inc(len(tweet_list))
                     if not since_id or not next_token:
                         # sort by time
                         tweets.reverse()
@@ -708,7 +708,7 @@ class ContextBuilderAgent:
             return data
         except Exception as e:
             logger.error(f"Tweet with image post failed: {e}")
-            post_tweet_success_count.inc()
+            post_tweet_failure_count.inc()
             raise e
 
     def image_upload_with_v2(self, image_bytes) -> int:

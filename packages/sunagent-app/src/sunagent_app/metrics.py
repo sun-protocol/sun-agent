@@ -13,6 +13,7 @@ read_tweet_failure_count = Counter("read_tweet_failure_count", "Number of failed
 
 # 失败监控
 twitter_api_failure_count = Counter("twitter_api_failure_count", "Number of Twitter API failures")
+
 model_api_failure_count = Counter("model_api_failure_count", "Number of Model API failures")
 model_api_success_count = Counter("model_api_success_count", "Number of Model API success")
 
