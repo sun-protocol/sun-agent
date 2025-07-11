@@ -205,3 +205,4 @@ uv.lock
 *.DS_Store
 samples/mem0x_memory/env
 ~
+.github

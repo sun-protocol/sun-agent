@@ -1,8 +1,8 @@
 from typing import Any, Optional, TypeVar, cast
 
 import diskcache
-from pydantic import BaseModel
 from autogen_core import CacheStore, Component
+from pydantic import BaseModel
 from typing_extensions import Self
 
 T = TypeVar("T")

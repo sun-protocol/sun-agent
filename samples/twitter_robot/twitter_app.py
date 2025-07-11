@@ -27,11 +27,10 @@ from autogen_agentchat.ui import Console
 from autogen_ext.agents.web_surfer import MultimodalWebSurfer
 from autogen_ext.cache_store.redis import RedisStore
 from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
+from dotenv import load_dotenv
 from playwright.async_api import BrowserContext, Playwright, async_playwright
 from quart import Quart, Response, jsonify, request
 from redis import Redis
-from tweepy import Client as TwitterClient
-
 from sunagent_app._constants import LOGGER_NAME
 from sunagent_app.agents import (
     ContextBuilderAgent,
@@ -50,7 +49,8 @@ from sunagent_app.templates.twitter_templates import (
     TweetReplyTemplate,
     TweetsAnalysisTemplate,
 )
-from dotenv import load_dotenv
+from tweepy import Client as TwitterClient
+
 # 加载 .env 文件
 load_dotenv()
 logging_config = os.getenv("LOGGING_CONFIG", "logging_config.yaml")

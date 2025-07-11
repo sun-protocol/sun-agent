@@ -1,17 +1,16 @@
-import os
 import logging
+import os
 from typing import Optional
 
-from onepassword.client import Client
-
 from autogen_core import EVENT_LOGGER_NAME, TRACE_LOGGER_NAME
+from onepassword.client import Client
 
 logger = logging.getLogger(EVENT_LOGGER_NAME)
 trace_logger = logging.getLogger(TRACE_LOGGER_NAME)
 
 
 class OnePasswordManager:
-    def __init__(self, token:str, integration_name: str, integration_version: str, op_path: str) -> None:
+    def __init__(self, token: str, integration_name: str, integration_version: str, op_path: str) -> None:
         self._client = None
         self.token = token
         self.integration_name = integration_name
