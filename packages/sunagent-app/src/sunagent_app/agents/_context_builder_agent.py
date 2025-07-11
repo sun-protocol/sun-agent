@@ -296,7 +296,7 @@ class ContextBuilderAgent:
             return 0, str(self.recover_time)
         elif recover_time <= int(time.time()):
             return 403, "recover time is already past"
-        elif recover_time > self.recover_time:
+        elif self.recover_time is None or recover_time > self.recover_time:
             self.recover_time = recover_time
         return 0, str(self.recover_time)
 
