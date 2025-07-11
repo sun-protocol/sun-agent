@@ -395,11 +395,7 @@ class ContextBuilderAgent:
         for attempt in range(self.retry_limit):
             try:
                 if self.me is None:
-                    response = self.twitter.get_me(
-                        user_auth=self.user_auth,
-                        user_fields=USER_FIELDS,
-                    )
-                    self.me = response.data
+                    await self.init_me()
                 if not self.quota["HOME_TIMELINE"].acquire_quota():
                     get_twitter_quota_limit.inc()
                     logger.warning(f"HOME_TIMELINE no quota, recover_time={self.quota['HOME_TIMELINE'].recover_time()}")
@@ -468,11 +464,7 @@ class ContextBuilderAgent:
         for attempt in range(self.retry_limit):
             try:
                 if self.me is None:
-                    response = self.twitter.get_me(
-                        user_auth=self.user_auth,
-                        user_fields=USER_FIELDS,
-                    )
-                    self.me = response.data
+                    await self.init_me()
                 if not self.quota["MENTIONS_TIMELINE"].acquire_quota():
                     get_twitter_quota_limit.inc()
                     logger.warning(
