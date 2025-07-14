@@ -16,7 +16,24 @@ from typing import (
     Union,
 )
 
-from pydantic import BaseModel
+from autogen_agentchat import EVENT_LOGGER_NAME
+from autogen_agentchat.agents._base_chat_agent import BaseChatAgent
+from autogen_agentchat.base import Handoff as HandoffBase
+from autogen_agentchat.base import Response
+from autogen_agentchat.messages import (
+    AgentEvent,
+    ChatMessage,
+    HandoffMessage,
+    MemoryQueryEvent,
+    ModelClientStreamingChunkEvent,
+    TextMessage,
+    ThoughtEvent,
+    ToolCallExecutionEvent,
+    ToolCallRequestEvent,
+    ToolCallSummaryMessage,
+)
+from autogen_agentchat.state import AssistantAgentState
+from autogen_agentchat.utils import remove_images
 from autogen_core import CancellationToken, Component, ComponentModel, FunctionCall
 from autogen_core.memory import Memory
 from autogen_core.model_context import (
@@ -35,26 +52,8 @@ from autogen_core.models import (
     UserMessage,
 )
 from autogen_core.tools import BaseTool, FunctionTool
+from pydantic import BaseModel
 from typing_extensions import Self
-
-from autogen_agentchat import EVENT_LOGGER_NAME
-from autogen_agentchat.base import Handoff as HandoffBase
-from autogen_agentchat.base import Response
-from autogen_agentchat.messages import (
-    AgentEvent,
-    ChatMessage,
-    HandoffMessage,
-    MemoryQueryEvent,
-    ModelClientStreamingChunkEvent,
-    TextMessage,
-    ThoughtEvent,
-    ToolCallExecutionEvent,
-    ToolCallRequestEvent,
-    ToolCallSummaryMessage,
-)
-from autogen_agentchat.state import AssistantAgentState
-from autogen_agentchat.utils import remove_images
-from autogen_agentchat.agents._base_chat_agent import BaseChatAgent
 
 event_logger = logging.getLogger(EVENT_LOGGER_NAME)
 

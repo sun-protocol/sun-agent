@@ -32,6 +32,8 @@ from google import genai
 from google.genai import types
 from PIL import Image as PILImage
 
+from sunagent_app.metrics import model_api_failure_count, model_api_success_count
+
 from .._constants import LOGGER_NAME
 from ..sunpump_service import SunPumpService
 from ._http_utils import fetch_url
@@ -124,6 +126,7 @@ class TokenLaunchAgent(BaseChatAgent):
                 ],
                 cancellation_token=cancellation_token,
             )
+            model_api_success_count.inc()
             assert isinstance(result.content, str)
             self._get_informations_from_message(TextMessage(content=result.content, source=self.name), informations)
             logger.info(f"generated informations: {json.dumps(informations)}")
@@ -160,9 +163,11 @@ class TokenLaunchAgent(BaseChatAgent):
                         person_generation=types.PersonGeneration.ALLOW_ADULT,
                     ),
                 )
+                model_api_success_count.inc()
                 raw_image = response.generated_images[0].image.image_bytes
                 image = PILImage.open(BytesIO(raw_image), formats=["JPEG", "PNG"])
             except Exception as e:
+                model_api_failure_count.inc()
                 logger.error(traceback.format_exc())
                 logger.error(f"Error generate image, {e}")
 

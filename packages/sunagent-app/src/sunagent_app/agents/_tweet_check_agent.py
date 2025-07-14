@@ -18,6 +18,8 @@ from autogen_core.models import (
     UserMessage,
 )
 
+from sunagent_app.metrics import model_api_failure_count, model_api_success_count
+
 from .._constants import LOGGER_NAME
 from ._markdown_utils import extract_markdown_json_blocks, extract_tweets_from_markdown_json_blocks
 
@@ -100,6 +102,7 @@ Evaluate result:
                 [self._system_message, UserMessage(content=prompt, source=message.source)],
                 cancellation_token=cancellation_token,
             )
+            model_api_success_count.inc()
             assert isinstance(result.content, str)
             blocks = extract_markdown_json_blocks(result.content)
             for block in blocks:
@@ -108,6 +111,7 @@ Evaluate result:
                 block["safe"] = block["score"] < 0.7
                 return f"Evaluate result:\n```json\n{json.dumps(block, ensure_ascii=False)}\n```"
         except Exception as e:
+            model_api_failure_count.inc()
             logger.error(f"error evaluate tweet, {e}")
         reject_message = "Evaluate result:\n```json\n{ 'score': false, 'reason': 'evaluate error' }\n```"
         return reject_message

@@ -26,6 +26,8 @@ from autogen_core.models import (
     UserMessage,
 )
 
+from sunagent_app.metrics import model_api_failure_count, model_api_success_count
+
 from .._constants import LOGGER_NAME
 from ._markdown_utils import extract_scores_from_markdown_json_blocks, extract_tweets_from_markdown_json_blocks
 
@@ -132,6 +134,7 @@ evaluate result: sementic: {sementic_score} popularity: {popularity} total_score
                 [self._system_message, UserMessage(content=prompt, source="user")],
                 cancellation_token=cancellation_token,
             )
+            model_api_success_count.inc()
             assert isinstance(result.content, str)
             scores = extract_scores_from_markdown_json_blocks(result.content)
             if len(scores) != len(tweets):
@@ -139,6 +142,7 @@ evaluate result: sementic: {sementic_score} popularity: {popularity} total_score
             if len(scores) >= len(tweets):
                 return scores[: len(tweets)]
         except Exception as e:
+            model_api_failure_count.inc()
             logger.error(f"error calculate sementic score, {e}")
         return [0] * len(tweets)
 
