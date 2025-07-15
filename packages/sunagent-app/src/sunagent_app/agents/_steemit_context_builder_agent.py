@@ -3,7 +3,7 @@ from beemapi.noderpc import NodeRPC
 from beem.comment import Comment
 from beem.account import Account
 from beem.comment import AccountPosts
-from beem.discussions import Discussions,Query
+from beem.discussions import Discussions,Query,Discussions_by_author_before_date,Discussions_by_comments
 
 class SteemContextBuilder(object):
 
@@ -16,9 +16,9 @@ class SteemContextBuilder(object):
         print(res)
         return f"https://steemit.com@{account_name}/{title}"
 
-    def _get_account(self, account_name) -> Account:
-        # return stm.steem.rpc.get_account(account_name)
-        return Account(account_name, blockchain_instance=self.steem)
+
+    def _get_discussions_before(self, account_name, date, limit):
+        return Discussions_by_author_before_date(author=account_name, date=date, limit=limit, blockchain_instance=self.steem)
 
 
 if __name__ == '__main__':
@@ -28,13 +28,13 @@ if __name__ == '__main__':
     # print(stm.steem.get_blockchain_name())
     # print(stm.steem.get_api_methods())
     rpc:NodeRPC = stm.steem.rpc
-    bobo:Account = stm._get_account("bobotinytiger")
     # print(bobo.name)
     # print(bobo.available_balances)
     # print(bobo.list_all_subscriptions())
-    print(123)
-    d = Discussions(blockchain_instance=stm.steem)
-    q= Query(limit=51, tag="steemit")
-    for ds in d.get_discussions(discussion_type="trending", discussion_query=q):
+    # print(123)
+    # dd = Discussions_by_author_before_date("bobotinytiger", blockchain_instance=stm.steem)
+    # for ds in dd:
+    #     print(ds)
+    q= Query(limit=1, start_author="bobotinytiger", start_permlink="test-title")
+    for ds in Discussions_by_comments(discussion_query=q, blockchain_instance=stm.steem):
         print( ds)
-
