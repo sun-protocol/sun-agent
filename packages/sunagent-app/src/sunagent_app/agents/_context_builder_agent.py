@@ -160,7 +160,8 @@ class RateLimit:
         return True
 
     def rollback_quota(self) -> None:
-        self.timestamps.pop()
+        if self.timestamps and len(self.timestamps) > 1:
+            self.timestamps.pop()
 
     def remain_quota(self) -> int:
         current_time = int(time.time())
