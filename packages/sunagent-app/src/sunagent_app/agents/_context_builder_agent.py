@@ -159,6 +159,10 @@ class RateLimit:
         self.timestamps.append(current_time)
         return True
 
+    def rollback_quota(self) -> None:
+        if len(self.timestamps) > 0:
+            self.timestamps.pop()
+
     def remain_quota(self) -> int:
         current_time = int(time.time())
         self._release_quota(current_time)
@@ -320,6 +324,7 @@ class ContextBuilderAgent:
             # we don't know whether fail posts costs twitter quota or not
             logger.error(f"create_tweet failed. {str(e)}")
             post_tweet_failure_count.inc()
+            self.quota["POST_TWEET"].rollback_quota()
             try:
                 status_code = e.response.status_code
             except AttributeError:
@@ -329,6 +334,7 @@ class ContextBuilderAgent:
         except Exception as e:
             logger.error(f"create_tweet failed. {str(e)}")
             post_tweet_failure_count.inc()
+            self.quota["POST_TWEET"].rollback_quota()
             return 500, "Server Error"
 
     async def reply_tweet(self, reply_to: str, content: str) -> str:
