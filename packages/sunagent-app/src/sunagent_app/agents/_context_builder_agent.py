@@ -177,6 +177,7 @@ class RateLimit:
         if self.limit == 0:
             return sys.maxsize
         return self.timestamps[0] + self.window if len(self.timestamps) >= self.limit else 0
+
     def _release_quota(self, current_time: int):
         cutoff = current_time - self.window
         while len(self.timestamps) > 0 and self.timestamps[0] < cutoff:
