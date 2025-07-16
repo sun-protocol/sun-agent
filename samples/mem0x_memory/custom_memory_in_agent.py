@@ -68,5 +68,3 @@ agent = AssistantAgent(
     # memory=get_knowledge_memory(),
     reflect_on_tool_use=True,
 )
-
-

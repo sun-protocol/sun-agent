@@ -12,11 +12,11 @@ import requests
 from requests_oauthlib import OAuth1Session
 
 # Prompt developer to enter App credentials
-print("Enter the credentials for your developer App below.") # noqa
-CONSUMER_KEY = input("Consumer key: ") # noqa
-CONSUMER_SECRET = input("Consumer secret: ") # noqa
-ACCESS_TOKEN = input("Access token: ") # noqa
-TOKEN_SECRET = input("Access token secret: ") # noqa
+print("Enter the credentials for your developer App below.")  # noqa
+CONSUMER_KEY = input("Consumer key: ")  # noqa
+CONSUMER_SECRET = input("Consumer secret: ")  # noqa
+ACCESS_TOKEN = input("Access token: ")  # noqa
+TOKEN_SECRET = input("Access token secret: ")  # noqa
 
 
 # Request an OAuth Request Token. This is the first step of the 3-legged OAuth flow. This generates a token that you can use to request user authorization for access.
@@ -30,7 +30,7 @@ def request_token():
         resource_owner_oauth_token = response.get("oauth_token")
         resource_owner_oauth_token_secret = response.get("oauth_token_secret")
     except requests.exceptions.RequestException as e:
-        print(e) # noqa
+        print(e)  # noqa
         sys.exit(120)
 
     return resource_owner_oauth_token, resource_owner_oauth_token_secret
@@ -65,7 +65,7 @@ def get_user_access_tokens(resource_owner_oauth_token, resource_owner_oauth_toke
         user_id = response["user_id"]
         screen_name = response["screen_name"]
     except requests.exceptions.RequestException as e:
-        print(e) # noqa
+        print(e)  # noqa
         sys.exit(120)
 
     return (access_token, access_token_secret, user_id, screen_name)
@@ -77,9 +77,9 @@ if __name__ == "__main__":
     access_token, access_token_secret, user_id, screen_name = get_user_access_tokens(
         resource_owner_oauth_token, resource_owner_oauth_token_secret, authorization_pin
     )
-    print( # noqa
+    print(  # noqa
         f"\n User @handle: {screen_name}",
         f"\n User ID: {user_id}",
         f"\n User access token: {access_token}",
         f" \n User access token secret: {access_token_secret} \n",
-    ) # noqa
+    )  # noqa

@@ -4,6 +4,7 @@ import logging
 import os
 import random
 import re
+import sys
 import time
 import traceback
 from collections import deque
@@ -152,6 +153,8 @@ class RateLimit:
         self.timestamps = deque()
 
     def acquire_quota(self) -> bool:
+        if self.limit == 0:
+            return False
         current_time = int(time.time())
         self._release_quota(current_time)
         if len(self.timestamps) >= self.limit:
@@ -171,6 +174,8 @@ class RateLimit:
     def recover_time(self) -> int:
         current_time = int(time.time())
         self._release_quota(current_time)
+        if self.limit == 0:
+            return sys.maxsize
         return self.timestamps[0] + self.window if len(self.timestamps) >= self.limit else 0
 
     def _release_quota(self, current_time: int):

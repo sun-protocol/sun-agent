@@ -1,7 +1,5 @@
 from prometheus_client import Counter, Gauge, Histogram, start_http_server
 
-
-
 # 发推监控
 post_tweet_success_count = Counter("post_tweet_success_count", "Number of successful post tweets")
 post_tweet_failure_count = Counter("post_tweet_failure_count", "Number of failed post tweets")
