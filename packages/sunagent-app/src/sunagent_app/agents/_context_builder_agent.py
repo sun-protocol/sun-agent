@@ -662,9 +662,6 @@ class ContextBuilderAgent:
 
     async def _fetch_tweet_with_retry(self, tweet_id: str) -> Optional[Dict[str, Any]]:
         """带重试机制的API调用"""
-        if not self.run_enabled:
-            logger.error("Twitter account banned, stop running")
-            return None
         for attempt in range(self.retry_limit):
             try:
                 response = self.twitter.get_tweet(
