@@ -173,6 +173,9 @@ class RateLimit:
         self._release_quota(current_time)
         return self.limit - len(self.timestamps)
 
+    def _reset_limit(self, limit: int):
+        self.limit = limit
+
     def recover_time(self) -> int:
         current_time = int(time.time())
         self._release_quota(current_time)
@@ -279,6 +282,7 @@ class ContextBuilderAgent:
             "SAMPLING_QUOTE_TWEET": DailyRateLimit(2, 8),
         }
         self.recover_time: Optional[int] = None
+        self.run_enabled = True
         self.block_user_ids = json.loads(os.getenv("BLOCK_USER_IDS", "[]"))
         logger.error(f"block_user_ids: {self.block_user_ids}")
         self.white_user_ids = json.loads(os.getenv("MENTIONS_WHITE_USER_ID", "[]"))
@@ -312,6 +316,8 @@ class ContextBuilderAgent:
         return 0, str(self.recover_time)
 
     async def create_tweet(self, kwargs: Dict[str, Any]) -> (int, str):
+        if not self.run_enabled:
+            return 403, "service not available"
         if not self.quota["POST_TWEET"].acquire_quota():
             post_twitter_quota_limit.inc()
             recover_time = self.quota["POST_TWEET"].recover_time()
@@ -327,6 +333,12 @@ class ContextBuilderAgent:
             logger.info(f"create_tweet succeed. {response.data}")
             post_tweet_success_count.inc()
             return 0, str(response.data["id"])
+        except Forbidden as e:
+            self.run_enabled = False
+            logger.error(f"create_tweet failed. {str(e)}")
+            post_tweet_failure_count.inc()
+            self.quota["POST_TWEET"]._reset_limit(0)
+            return 403, "Server Error"
         except TweepyException as e:
             # we don't know whether fail posts costs twitter quota or not
             logger.error(f"create_tweet failed. {str(e)}")
@@ -391,7 +403,9 @@ class ContextBuilderAgent:
         Params: no parameters required
         Return: json string, which is a list of tweets
         """
-
+        if not self.run_enabled:
+            logger.info("service not available")
+            return "[]"
         tweets: List[str] = []
         since_id: Optional[str] = None
         cache_key = f"{self.agent_id}:{HOME_TIMELINE_ID}"
@@ -449,6 +463,7 @@ class ContextBuilderAgent:
             except Forbidden:
                 twitter_account_banned.inc()
                 read_tweet_failure_count.inc()
+                self.run_enabled = False
                 logger.info(f"get_home_timeline_with_context newest_id: {newest_id}")
                 logger.error(traceback.format_exc())
                 break
@@ -474,6 +489,9 @@ class ContextBuilderAgent:
         Params: no parameters required
         Return: json string, which is a list of tweets
         """
+        if not self.run_enabled:
+            logger.info("service not available")
+            return "[]"
         tweets: List[Dict[str, Any]] = []
         since_id: Optional[str] = None
         next_token: Optional[str] = None
@@ -535,6 +553,7 @@ class ContextBuilderAgent:
             except Forbidden as e:
                 twitter_account_banned.inc()
                 read_tweet_failure_count.inc()
+                self.run_enabled = False
                 logger.error(f"Forbidden error get_mentions_with_context(attempt {attempt+1}): {str(e)}")
                 logger.error(traceback.format_exc())
                 break
@@ -659,6 +678,7 @@ class ContextBuilderAgent:
                 self._format_tweet_data(tweet, users, medias)
                 return tweet
             except Forbidden as e:
+                self.run_enabled = False
                 logger.error(f"error get_tweet(attempt {attempt+1}): {str(e)}")
                 twitter_account_banned.inc()
                 return None
