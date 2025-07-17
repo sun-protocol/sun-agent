@@ -173,8 +173,10 @@ class RateLimit:
         self._release_quota(current_time)
         return self.limit - len(self.timestamps)
 
-    def _reset_limit(self, limit: int):
-        self.limit = limit
+    def _fill_quota(self):
+        current_time = int(time.time())
+        for _ in range(self.limit - len(self.timestamps)):
+            self.timestamps.append(current_time)
 
     def recover_time(self) -> int:
         current_time = int(time.time())
@@ -337,7 +339,7 @@ class ContextBuilderAgent:
             self.run_enabled = False
             logger.error(f"create_tweet failed. {str(e)}")
             post_tweet_failure_count.inc()
-            self.quota["POST_TWEET"]._reset_limit(0)
+            self.quota["POST_TWEET"]._fill_quota()
             return 403, "Server Error"
         except TweepyException as e:
             # we don't know whether fail posts costs twitter quota or not
@@ -657,6 +659,9 @@ class ContextBuilderAgent:
 
     async def _fetch_tweet_with_retry(self, tweet_id: str) -> Optional[Dict[str, Any]]:
         """带重试机制的API调用"""
+        if not self.run_enabled:
+            logger.error(f"Twitter account banned, stop running")
+            return None
         for attempt in range(self.retry_limit):
             try:
                 response = self.twitter.get_tweet(
