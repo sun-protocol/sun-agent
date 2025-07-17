@@ -335,9 +335,10 @@ class ContextBuilderAgent:
             logger.info(f"create_tweet succeed. {response.data}")
             post_tweet_success_count.inc()
             return 0, str(response.data["id"])
-        except Forbidden as e:
+        except Forbidden:
             self.run_enabled = False
-            logger.error(f"create_tweet failed. {str(e)}")
+            logger.error(f"twitter account {self.agent_id} baned")
+            twitter_account_banned.inc()
             post_tweet_failure_count.inc()
             self.quota["POST_TWEET"]._fill_quota()
             return 403, "Server Error"
@@ -463,6 +464,7 @@ class ContextBuilderAgent:
                     logger.info(f"get_home_timeline_with_context newest_id: {newest_id}")
                 return json.dumps(tweets, ensure_ascii=False, default=str)
             except Forbidden:
+                logger.error(f"twitter account {self.agent_id} baned")
                 twitter_account_banned.inc()
                 read_tweet_failure_count.inc()
                 self.run_enabled = False
@@ -553,6 +555,7 @@ class ContextBuilderAgent:
                 # success
                 break
             except Forbidden as e:
+                logger.error(f"twitter account {self.agent_id} baned")
                 twitter_account_banned.inc()
                 read_tweet_failure_count.inc()
                 self.run_enabled = False
@@ -660,7 +663,7 @@ class ContextBuilderAgent:
     async def _fetch_tweet_with_retry(self, tweet_id: str) -> Optional[Dict[str, Any]]:
         """带重试机制的API调用"""
         if not self.run_enabled:
-            logger.error(f"Twitter account banned, stop running")
+            logger.error("Twitter account banned, stop running")
             return None
         for attempt in range(self.retry_limit):
             try:
@@ -683,10 +686,7 @@ class ContextBuilderAgent:
                 self._format_tweet_data(tweet, users, medias)
                 return tweet
             except Forbidden as e:
-                self.run_enabled = False
-                logger.error(f"error get_tweet(attempt {attempt+1}): {str(e)}")
-                twitter_account_banned.inc()
-                return None
+                raise e
             except TooManyRequests as e:
                 logger.error(f"error get_tweet(attempt {attempt + 1}): {str(e)}")
                 return None
