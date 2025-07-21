@@ -556,11 +556,11 @@ class ContextBuilderAgent:
                 # success
                 break
             except Forbidden as e:
-                logger.error(f"twitter account {self.agent_id} baned")
+                logger.error(f"twitter account {self.agent_id} baned error {str(e)}")
                 twitter_account_banned.inc()
                 read_tweet_failure_count.inc()
                 self.run_enabled = False
-                logger.error(f"Forbidden error get_mentions_with_context(attempt {attempt+1}): {str(e)}")
+                logger.info(f"get_mentions_with_context newest_id: {newest_id}")
                 logger.error(traceback.format_exc())
                 break
             except TooManyRequests as e:
