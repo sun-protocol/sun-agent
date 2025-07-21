@@ -335,9 +335,9 @@ class ContextBuilderAgent:
             logger.info(f"create_tweet succeed. {response.data}")
             post_tweet_success_count.inc()
             return 0, str(response.data["id"])
-        except Forbidden:
+        except Forbidden as e:
             self.run_enabled = False
-            logger.error(f"twitter account {self.agent_id} baned")
+            logger.error(f"twitter account {self.agent_id} baned error {str(e)}")
             twitter_account_banned.inc()
             post_tweet_failure_count.inc()
             logger.error(traceback.format_exc())
