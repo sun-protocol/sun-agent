@@ -464,8 +464,8 @@ class ContextBuilderAgent:
                         self.cache.set(cache_key, str(newest_id))
                     logger.info(f"get_home_timeline_with_context newest_id: {newest_id}")
                 return json.dumps(tweets, ensure_ascii=False, default=str)
-            except Forbidden:
-                logger.error(f"twitter account {self.agent_id} baned")
+            except Forbidden as e:
+                logger.error(f"twitter account {self.agent_id} baned error {str(e)}")
                 twitter_account_banned.inc()
                 read_tweet_failure_count.inc()
                 self.run_enabled = False
