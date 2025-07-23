@@ -141,13 +141,13 @@ class ImageGenerateAgent(BaseChatAgent):
                 prompt=image_prompt,
                 config=types.GenerateImagesConfig(number_of_images=1),
             )
-            model_api_success_count.labels("image").inc()
+            model_api_success_count.inc()
             raw_image = response.generated_images[0].image.image_bytes
             image = PILImage.open(BytesIO(raw_image), formats=["PNG"])
             return image.resize((self.width, self.height))
         except Exception as e:
             logger.error(f"Error generating image: {e}")
-            model_api_failure_count.labels("image").inc()
+            model_api_failure_count.inc()
             logger.error(traceback.format_exc())
             return None
 
