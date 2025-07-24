@@ -51,6 +51,7 @@ CONVERSATION_KEY_PREFIX = "C:"
 FREQ_KEY_PREFIX = "F:"
 HOME_TIMELINE_ID = "last_home_timeline"
 MENTIONS_TIMELINE_ID = "last_mentions_timeline"
+ACCOUNT_LOCKED_INFO = "Your account is temporarily locked"
 # fetch tweet data fields
 TWEET_FIELDS = [
     "article",
@@ -247,7 +248,7 @@ class ContextBuilderAgent:
             post_tweet_success_count.inc()
             return 0, str(response.data["id"])
         except Forbidden as e:
-            if "Your account is temporarily locked" in str(e):
+            if ACCOUNT_LOCKED_INFO in str(e):
                 self.run_enabled = False
                 logger.error(f"twitter account {self.agent_id} baned error {str(e)}")
                 twitter_account_banned.inc()
@@ -379,7 +380,7 @@ class ContextBuilderAgent:
                     logger.info(f"get_home_timeline_with_context newest_id: {newest_id}")
                 return json.dumps(tweets, ensure_ascii=False, default=str)
             except Forbidden as e:
-                if "Your account is temporarily locked" in str(e):
+                if ACCOUNT_LOCKED_INFO in str(e):
                     logger.error(f"twitter account {self.agent_id} baned error {str(e)}")
                     twitter_account_banned.inc()
                     read_tweet_failure_count.inc()
@@ -474,7 +475,7 @@ class ContextBuilderAgent:
                 break
             except Forbidden as e:
                 logger.error(f"twitter account {self.agent_id} baned error {str(e)}")
-                if "Your account is temporarily locked" in str(e):
+                if ACCOUNT_LOCKED_INFO in str(e):
                     twitter_account_banned.inc()
                     read_tweet_failure_count.inc()
                     self.run_enabled = False
