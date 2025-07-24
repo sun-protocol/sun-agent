@@ -25,6 +25,7 @@ dependencies = [
   "flask[async]",
   "flask_cors",
   "quart",
+  "beem",
   "tweepy",
   "async_lru",
   "apscheduler",
