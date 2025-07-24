@@ -41,7 +41,7 @@ from sunagent_app.metrics import (
 )
 
 from .._constants import LOGGER_NAME
-from ..utils import RateLimit, DailyRateLimit
+from ..utils import DailyRateLimit, RateLimit
 
 logger = logging.getLogger(LOGGER_NAME)
 
