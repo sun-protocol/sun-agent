@@ -252,12 +252,10 @@ class ContextBuilderAgent:
                 self.run_enabled = False
                 logger.error(f"twitter account {self.agent_id} baned error {str(e)}")
                 twitter_account_banned.inc()
-                post_tweet_failure_count.inc()
-                logger.error(traceback.format_exc())
-                self.quota["POST_TWEET"]._fill_quota()
-                return 403, "Server Error"
-            else:
-                raise e
+            post_tweet_failure_count.inc()
+            logger.error(traceback.format_exc())
+            self.quota["POST_TWEET"]._fill_quota()
+            return 403, "Server Error"
         except TweepyException as e:
             # we don't know whether fail posts costs twitter quota or not
             logger.error(f"create_tweet failed. {str(e)}")
@@ -383,13 +381,11 @@ class ContextBuilderAgent:
                 if ACCOUNT_LOCKED_INFO in str(e):
                     logger.error(f"twitter account {self.agent_id} baned error {str(e)}")
                     twitter_account_banned.inc()
-                    read_tweet_failure_count.inc()
                     self.run_enabled = False
-                    logger.info(f"get_home_timeline_with_context newest_id: {newest_id}")
-                    logger.error(traceback.format_exc())
-                    break
-                else:
-                    raise e
+                read_tweet_failure_count.inc()
+                logger.info(f"get_home_timeline_with_context newest_id: {newest_id}")
+                logger.error(traceback.format_exc())
+                break
             except TooManyRequests:
                 logger.info(f"get_home_timeline_with_context newest_id: {newest_id}")
                 logger.error(traceback.format_exc())
@@ -477,13 +473,11 @@ class ContextBuilderAgent:
                 logger.error(f"twitter account {self.agent_id} baned error {str(e)}")
                 if ACCOUNT_LOCKED_INFO in str(e):
                     twitter_account_banned.inc()
-                    read_tweet_failure_count.inc()
                     self.run_enabled = False
-                    logger.info(f"get_mentions_with_context newest_id: {newest_id}")
-                    logger.error(traceback.format_exc())
-                    break
-                else:
-                    raise e
+                read_tweet_failure_count.inc()
+                logger.info(f"get_mentions_with_context newest_id: {newest_id}")
+                logger.error(traceback.format_exc())
+                break
             except TooManyRequests as e:
                 logger.error(f"too many requests get_mentions_with_context(attempt {attempt + 1}): {str(e)}")
                 logger.error(traceback.format_exc())
