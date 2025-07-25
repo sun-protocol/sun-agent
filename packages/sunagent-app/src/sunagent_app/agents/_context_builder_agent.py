@@ -37,6 +37,7 @@ from sunagent_app.metrics import (
     post_twitter_quota_limit,
     read_tweet_failure_count,
     read_tweet_success_count,
+    tweet_monthly_cap,
     twitter_account_banned,
 )
 
@@ -52,6 +53,7 @@ FREQ_KEY_PREFIX = "F:"
 HOME_TIMELINE_ID = "last_home_timeline"
 MENTIONS_TIMELINE_ID = "last_mentions_timeline"
 ACCOUNT_LOCKED_INFO = "Your account is temporarily locked"
+MONTHLY_CAP_INFO = "Monthly product cap"
 # fetch tweet data fields
 TWEET_FIELDS = [
     "article",
@@ -386,7 +388,10 @@ class ContextBuilderAgent:
                 logger.info(f"get_home_timeline_with_context newest_id: {newest_id}")
                 logger.error(traceback.format_exc())
                 break
-            except TooManyRequests:
+            except TooManyRequests as e:
+                if MONTHLY_CAP_INFO in str(e):
+                    tweet_monthly_cap.inc()
+                read_tweet_failure_count.inc()
                 logger.info(f"get_home_timeline_with_context newest_id: {newest_id}")
                 logger.error(traceback.format_exc())
                 break
@@ -479,6 +484,9 @@ class ContextBuilderAgent:
                 logger.error(traceback.format_exc())
                 break
             except TooManyRequests as e:
+                if MONTHLY_CAP_INFO in str(e):
+                    tweet_monthly_cap.inc()
+                read_tweet_failure_count.inc()
                 logger.error(f"too many requests get_mentions_with_context(attempt {attempt + 1}): {str(e)}")
                 logger.error(traceback.format_exc())
                 break
@@ -602,7 +610,7 @@ class ContextBuilderAgent:
                 raise e
             except TooManyRequests as e:
                 logger.error(f"error get_tweet(attempt {attempt + 1}): {str(e)}")
-                return None
+                raise e
             except Exception as e:
                 if isinstance(e, NotFound):
                     logger.warning(f"tweet not exists: {tweet_id}")
