@@ -8,6 +8,8 @@ post_tweet_failure_count = Counter("post_tweet_failure_count", "Number of failed
 read_tweet_success_count = Counter("read_tweet_success_count", "Number of successful read tweets")
 read_tweet_failure_count = Counter("read_tweet_failure_count", "Number of failed read tweets")
 
+tweet_monthly_cap = Gauge("tweet_monthly_cap", "Tweet monthly cap")
+
 # 失败监控
 model_api_failure_count = Counter("model_api_failure_count", "Number of Model API failures")
 model_api_success_count = Counter("model_api_success_count", "Number of Model API success")
