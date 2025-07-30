@@ -254,9 +254,9 @@ class ContextBuilderAgent:
                 self.run_enabled = False
                 logger.error(f"twitter account {self.agent_id} baned error {str(e)}")
                 twitter_account_banned.inc()
+                self.quota["POST_TWEET"]._fill_quota()
             post_tweet_failure_count.inc()
             logger.error(traceback.format_exc())
-            self.quota["POST_TWEET"]._fill_quota()
             return 403, "Server Error"
         except TweepyException as e:
             # we don't know whether fail posts costs twitter quota or not
