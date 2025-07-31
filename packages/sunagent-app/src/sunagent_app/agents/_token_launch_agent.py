@@ -84,37 +84,37 @@ class TokenLaunchAgent(BaseChatAgent):
                             informations[parameter] = value
 
     async def on_messages(self, messages: Sequence[ChatMessage], cancellation_token: CancellationToken) -> Response:
-        """处理消息并发行代币"""
-        # 1. 提取推特和信息
+        """Process messages and launch token"""
+        # 1. Extract tweet and info
         tweet, informations = self._extract_tweet_and_informations(messages)
         
-        # 2. 验证是否可以发行新代币
+        # 2. Validate token launch permission
         permission_result = self._validate_token_launch_permission(tweet)
         if permission_result:
             return permission_result
         
-        # 3. 检查和补全缺失信息
+        # 3. Check and complete missing info
         completion_result = await self._complete_missing_informations(
             informations, tweet, cancellation_token
         )
         if completion_result:
             return completion_result
         
-        # 4. 检查之前的发行状态
+        # 4. Check previous launch status
         status_result = await self._check_previous_launch_status(informations["username"])
         if status_result:
             return status_result
         
-        # 5. 获取或生成图像
+        # 5. Get or generate image
         image_result = await self._get_or_generate_image(tweet, informations)
         if isinstance(image_result, Response):
             return image_result
         
-        # 6. 发行代币
+        # 6. Launch token
         return await self._launch_token(informations, image_result)
 
     def _extract_tweet_and_informations(self, messages: Sequence[ChatMessage]) -> tuple[Dict[str, Any], Dict[str, Optional[str]]]:
-        """从消息中提取推特和相关信息"""
+        """Extract tweet and related info from messages"""
         tweet: Optional[Dict[str, Any]] = None
         informations: Dict[str, Optional[str]] = {
             "name": None,
@@ -138,7 +138,7 @@ class TokenLaunchAgent(BaseChatAgent):
         return tweet, informations
 
     def _validate_token_launch_permission(self, tweet: Dict[str, Any]) -> Optional[Response]:
-        """验证推特是否允许发行新代币"""
+        """Validate if tweet allows new token launch"""
         can_launch = tweet.get("can_launch_new_token", "").strip().lower()
         if can_launch != "ok":
             return Response(
@@ -152,10 +152,10 @@ class TokenLaunchAgent(BaseChatAgent):
         tweet: Dict[str, Any], 
         cancellation_token: CancellationToken
     ) -> Optional[Response]:
-        """检查并补全缺失的信息"""
+        """Check and complete missing info"""
         missing_parameters = [key for key, value in informations.items() if value is None]
         
-        # 如果关键信息都缺失，要求用户提供
+        # If critical info missing, ask user
         critical_params = {"name", "symbol", "description"}
         if critical_params.issubset(set(missing_parameters)):
             return Response(
@@ -165,7 +165,7 @@ class TokenLaunchAgent(BaseChatAgent):
                 )
             )
         
-        # 使用AI模型补全部分缺失信息
+        # Use AI model to fill missing info
         if missing_parameters:
             await self._generate_missing_informations(informations, tweet, cancellation_token)
             
@@ -177,7 +177,7 @@ class TokenLaunchAgent(BaseChatAgent):
         tweet: Dict[str, Any], 
         cancellation_token: CancellationToken
     ) -> None:
-        """使用AI模型生成缺失的信息"""
+        """Use AI model to generate missing info"""
         try:
             result = await self._model_client.create(
                 [
@@ -200,7 +200,7 @@ class TokenLaunchAgent(BaseChatAgent):
             raise
 
     async def _check_previous_launch_status(self, username: Optional[str]) -> Optional[Response]:
-        """检查用户之前的代币发行状态"""
+        """Check user's previous token launch status"""
         try:
             status = await self._sunpump_service.query_launch_token_status_by_user(username)
             if status == "UPLOADED":
@@ -223,18 +223,18 @@ class TokenLaunchAgent(BaseChatAgent):
         tweet: Dict[str, Any], 
         informations: Dict[str, Optional[str]]
     ) -> PILImage.Image | Response:
-        """获取或生成代币图像"""
-        # 尝试从推特URL获取图像
+        """Get or generate token image"""
+        # Try to get image from tweet URL
         if "image_url" in tweet:
             image = await self._fetch_image_from_url(tweet["image_url"])
             if image:
                 return image
         
-        # 生成新图像
+        # Generate new image
         return await self._generate_token_image(informations.get("image_description"))
 
     async def _fetch_image_from_url(self, image_url: str) -> Optional[PILImage.Image]:
-        """从URL获取图像"""
+        """Fetch image from URL"""
         try:
             raw_image = await fetch_url(image_url)
             if raw_image:
@@ -244,7 +244,7 @@ class TokenLaunchAgent(BaseChatAgent):
         return None
 
     async def _generate_token_image(self, image_description: Optional[str]) -> PILImage.Image | Response:
-        """生成代币图像"""
+        """Generate token image"""
         prompt_text = ",".join([random.choice(self._image_styles), image_description or ""])
         
         try:
@@ -276,7 +276,7 @@ class TokenLaunchAgent(BaseChatAgent):
         informations: Dict[str, Optional[str]], 
         image: PILImage.Image
     ) -> Response:
-        # 调整图像尺寸并转换格式
+        # Resize and convert image
         resized_image = Image.from_pil(image.resize((self.width, self.height)))
             
         try:
