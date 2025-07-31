@@ -87,7 +87,7 @@ class TokenLaunchAgent(BaseChatAgent):
         """Process messages and launch token"""
         # 1. Extract tweet and info
         tweet, informations = self._extract_tweet_and_informations(messages)
-        
+        logger.info(f"TokenLaunchAgent Tweet: {tweet}, Informations: {informations}")
         # 2. Validate token launch permission
         permission_result = self._validate_token_launch_permission(tweet)
         if permission_result:
@@ -141,6 +141,7 @@ class TokenLaunchAgent(BaseChatAgent):
         """Validate if tweet allows new token launch"""
         can_launch = tweet.get("can_launch_new_token", "").strip().lower()
         if can_launch != "ok":
+            logger.warning(f"Tweet does not allow token launch: {tweet['can_launch_new_token']}")
             return Response(
                 chat_message=TextMessage(content=tweet["can_launch_new_token"], source=self.name)
             )
@@ -158,6 +159,7 @@ class TokenLaunchAgent(BaseChatAgent):
         # If critical info missing, ask user
         critical_params = {"name", "symbol", "description"}
         if critical_params.issubset(set(missing_parameters)):
+            logger.warning(f"Critical info missing: {missing_parameters}")
             return Response(
                 chat_message=TextMessage(
                     content=f"ask user for these informations {json.dumps(missing_parameters)}", 
@@ -186,6 +188,7 @@ class TokenLaunchAgent(BaseChatAgent):
                 ],
                 cancellation_token=cancellation_token,
             )
+            logger.info(f"generated missing informations: {result}")
             model_api_success_count.inc()
             
             if isinstance(result.content, str):
@@ -203,6 +206,7 @@ class TokenLaunchAgent(BaseChatAgent):
         """Check user's previous token launch status"""
         try:
             status = await self._sunpump_service.query_launch_token_status_by_user(username)
+            logger.info(f"Previous launch status: {status}")
             if status == "UPLOADED":
                 return Response(
                     chat_message=TextMessage(
@@ -226,6 +230,7 @@ class TokenLaunchAgent(BaseChatAgent):
         """Get or generate token image"""
         # Try to get image from tweet URL
         if "image_url" in tweet:
+            logger.info(f"Fetching image from URL: {tweet['image_url']}")
             image = await self._fetch_image_from_url(tweet["image_url"])
             if image:
                 return image
@@ -246,7 +251,7 @@ class TokenLaunchAgent(BaseChatAgent):
     async def _generate_token_image(self, image_description: Optional[str]) -> PILImage.Image | Response:
         """Generate token image"""
         prompt_text = ",".join([random.choice(self._image_styles), image_description or ""])
-        
+        logger.info(f"Generating image with prompt: {prompt_text}")
         try:
             response = self._image_model.models.generate_images(
                 model=self._model_name,
@@ -288,6 +293,7 @@ class TokenLaunchAgent(BaseChatAgent):
                 informations.get("tweet_id", ""),
                 str(informations["username"]),
             )
+            logger.info(f"Token Launch Result: {response}")
             return Response(
                 chat_message=TextMessage(content=f"Token Launch Result:\n{response}", source=self.name)
             )
