@@ -60,7 +60,7 @@ class TokenLaunchAgent(BaseChatAgent):
     ) -> None:
         super().__init__(name=name, description=description)
         self._model_client = model_client
-        self._system_message = system_message
+        self._system_message = SystemMessage(content=system_message)
         self._image_model = genai.Client(api_key=os.getenv("GOOGLE_GEMINI_API_KEY"))
         self._model_name = image_model
         self._image_styles = image_styles
@@ -183,7 +183,7 @@ class TokenLaunchAgent(BaseChatAgent):
         try:
             result = await self._model_client.create(
                 [
-                    SystemMessage(content=self._system_message),
+                    self._system_message,
                     UserMessage(content=f"```json\n{json.dumps(tweet, ensure_ascii=False)}\n```", source="user"),
                 ],
                 cancellation_token=cancellation_token,
