@@ -53,6 +53,7 @@ class TokenLaunchAgent(BaseChatAgent):
         sunpump_service: SunPumpService,
         model_client: ChatCompletionClient,
         system_message: str,
+        prompt_for_image_prompt: str,
         image_styles: List[str],
         image_model: str = "imagen-3.0-generate-002",
         width: int = 400,
@@ -63,6 +64,7 @@ class TokenLaunchAgent(BaseChatAgent):
         self._system_message = SystemMessage(content=system_message)
         self._image_model = genai.Client(api_key=os.getenv("GOOGLE_GEMINI_API_KEY"))
         self._model_name = image_model
+        self._prompt_for_image_prompt = SystemMessage(content=prompt_for_image_prompt)
         self._image_styles = image_styles
         self.width = width
         self.height = height
@@ -170,6 +172,7 @@ class TokenLaunchAgent(BaseChatAgent):
         # Use AI model to fill missing info
         if missing_parameters:
             await self._generate_missing_informations(informations, tweet, cancellation_token)
+            await self._generate_missing_image_description(informations, tweet, cancellation_token)
             
         return None
 
@@ -200,6 +203,38 @@ class TokenLaunchAgent(BaseChatAgent):
         except Exception as e:
             model_api_failure_count.inc()
             logger.error(f"Error generating missing informations: {e}")
+            raise
+
+    async def _generate_missing_image_description(
+        self, 
+        informations: Dict[str, Optional[str]], 
+        tweet: Dict[str, Any], 
+        cancellation_token: CancellationToken
+    ) -> None:
+        if informations.get("image_description"):
+            return
+        
+        try:
+            result = await self._model_client.create(
+                [
+                    self._prompt_for_image_prompt,
+                    UserMessage(
+                        content=f"```json\n{json.dumps(tweet, ensure_ascii=False)}, image_style: {random.choice(self._image_styles)}\n```",
+                        source="user"
+                    ),
+                ],
+                cancellation_token=cancellation_token,
+            )
+            logger.info(f"generated image description: {result}")
+            model_api_success_count.inc()
+            
+            if isinstance(result.content, str):
+                informations["image_description"] = result.content.strip()
+                logger.info(f"updated image description: {informations.get('image_description')}")
+                
+        except Exception as e:
+            model_api_failure_count.inc()
+            logger.error(f"Error generating image description: {e}")
             raise
 
     async def _check_previous_launch_status(self, username: Optional[str]) -> Optional[Response]:
@@ -250,12 +285,11 @@ class TokenLaunchAgent(BaseChatAgent):
 
     async def _generate_token_image(self, image_description: Optional[str]) -> PILImage.Image | Response:
         """Generate token image"""
-        prompt_text = ",".join([random.choice(self._image_styles), image_description or ""])
-        logger.info(f"Generating image with prompt: {prompt_text}")
+        logger.info(f"Generating image with prompt: {image_description}")
         try:
             response = self._image_model.models.generate_images(
                 model=self._model_name,
-                prompt=prompt_text,
+                prompt=image_description,
                 config=types.GenerateImagesConfig(
                     number_of_images=1,
                     person_generation=types.PersonGeneration.ALLOW_ADULT,
