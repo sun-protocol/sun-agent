@@ -1,20 +1,6 @@
-import asyncio
-from typing import Sequence
-
-from autogen_agentchat.agents import AssistantAgent
-from autogen_agentchat.conditions import SourceMatchTermination, TextMentionTermination
-from autogen_agentchat.teams import RoundRobinGroupChat
-from autogen_core.memory import Memory
-from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
-
-from sunagent_app.agents._markdown_utils import extract_json_from_string
 
 
-class ContentGenerator:
-    def __init__(
-        self,
-        model_client: AzureOpenAIChatCompletionClient,
-        original_guard_prompt="""
+ORIGINAL_GUARD_PROMPT="""
 You are a one-line content-safety classifier.
 Task: read the incoming text and output ONLY a valid JSON object with two keys:
 
@@ -30,8 +16,9 @@ Rules
 2. If none of the above → safe=true, reason=""
 3. If any violation → safe=false, reason="violates <category>"
 4. Return ONLY the JSON; no explanation, no markdown, no extra characters.
-""",
-        content_generator_prompt="""
+"""
+
+CONTENT_GENERATOR_PROMPT="""
   You are SunLumi, an AI social media assistant specialized in blockchain and technology topics.
   You will be given a piece of flash news.
   Your job is to share the news and your thoughts on it. Do not copy the news directly.
@@ -72,8 +59,9 @@ Rules
       "language": "{language}"
   }
   ```
-""",
-        content_guard_prompt="""
+"""
+
+CONTENT_GUARD_PROMPT="""
     You are a ComplianceAdvisor. You will be given a tweet.
     Your task is to evaluate the reply for content safety.
     Make sure the reply meets all the requirements:
@@ -96,8 +84,9 @@ Rules
         "reason": string
     }
     ```
-    """,
-        formatter_prompt="""
+    """
+
+FORMATTER_PROMPT="""
 Please optimize the following Tweet for maximum impact while strictly following these rules:
 Core info first: highlight the main point, call-to-action, or key data up top.
 Boost readability:
@@ -124,44 +113,4 @@ Keep tone natural; line breaks serve clarity, not clutter.
       "language": "{language}"
     }
     ```
-                 """,
-        memory: Sequence[Memory] | None = None,
-    ):
-        self.model_client = model_client
-        self.original_guard_prompt = original_guard_prompt
-        self.content_generator_prompt = content_generator_prompt
-        self.content_guard_prompt = content_guard_prompt
-        self.formatter_prompt = formatter_prompt
-        self.memory = memory
-
-    def create_content_team(self):
-        original_guard = AssistantAgent(
-            name="original_content_guard",
-            system_message=self.original_guard_prompt,
-            model_client=self.model_client,
-        )
-
-        content_generator = AssistantAgent(
-            name="content_generator",
-            system_message=self.content_generator_prompt,
-            model_client=self.model_client,
-            memory=self.memory,
-        )
-
-        content_guard = AssistantAgent(
-            name="content_guard",
-            system_message=self.content_guard_prompt,
-            model_client=self.model_client,
-        )
-        formatter = AssistantAgent(
-            name="formatter",
-            system_message=self.formatter_prompt,
-            model_client=self.model_client,
-        )
-
-        team = RoundRobinGroupChat(
-            [original_guard, content_generator, content_guard, formatter],
-            termination_condition=SourceMatchTermination(["formatter"]) | TextMentionTermination("EARLY_TERMINATE"),
-            max_turns=4,
-        )
-        return team
+                 """
