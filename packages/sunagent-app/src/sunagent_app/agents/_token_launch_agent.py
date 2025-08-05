@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-import random
+import io
 from io import BytesIO
 from typing import (
     Any,
@@ -111,7 +111,7 @@ class TokenLaunchAgent(BaseChatAgent):
         return RoundRobinGroupChat(
             participants=[prompt_agent, generation_agent],
             termination_condition=SourceMatchTermination(["ImageGenerateAgent"]) | TextMentionTermination("EARLY_TERMINATE"),
-            max_turns=1
+            max_turns=2
         )
 
     async def on_messages(self, messages: Sequence[ChatMessage], cancellation_token: CancellationToken) -> Response:
@@ -296,7 +296,11 @@ class TokenLaunchAgent(BaseChatAgent):
                 if isinstance(last_message, MultiModalMessage) and last_message.content:
                     for content_item in last_message.content:
                         if isinstance(content_item, Image):
-                            return content_item.to_pil()
+                            buffer = io.BytesIO()
+                            image = content_item.image
+                            image.save(buffer, format="PNG")
+                            buffer.seek(0)
+                            return PILImage.open(buffer)
             
             return Response(
                 chat_message=TextMessage(
@@ -306,7 +310,6 @@ class TokenLaunchAgent(BaseChatAgent):
             )
             
         except Exception as e:
-            model_api_failure_count.inc()
             logger.error(f"Error using image generation team: {e}")
             return Response(
                 chat_message=TextMessage(

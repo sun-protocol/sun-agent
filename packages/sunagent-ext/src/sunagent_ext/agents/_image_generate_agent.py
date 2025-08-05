@@ -31,8 +31,6 @@ logger = logging.getLogger(LOGGER_NAME)
 
 
 class ImagePromptAgent(BaseChatAgent):
-    """负责生成图像提示词的Agent。分析内容并生成优化的图像描述。"""
-
     _image_styles = [
         "Studio Ghibli style, magical atmosphere, hand-drawn look, soft colors",
         "dynamic cartoon-style illustration",
@@ -77,7 +75,7 @@ class ImagePromptAgent(BaseChatAgent):
         name: str,
         text_model_client: AzureOpenAIChatCompletionClient,
         *,
-        description: str = "负责分析内容并生成优化的图像提示词",
+        description: str = "Responsible for analyzing content and generating optimized image prompts",
     ) -> None:
         super().__init__(name=name, description=description)
         self.text_model_client = text_model_client
@@ -88,12 +86,12 @@ class ImagePromptAgent(BaseChatAgent):
 
     async def on_messages(self, messages: Sequence[ChatMessage], cancellation_token: CancellationToken) -> Response:
         try:
-            # 提取图像生成元数据
+            # Extract image generation metadata
             image_metadata = self._extract_metadata(messages)
-            # 生成图像提示词
+            # Generate image prompt
             image_prompt = await self._generate_prompt(image_metadata)
             if not image_prompt:
-                return self._create_error_response("生成图像提示词失败")
+                return self._create_error_response("Failed to generate image prompt")
             return Response(
                 chat_message=TextMessage(
                     content=image_prompt,
@@ -102,35 +100,36 @@ class ImagePromptAgent(BaseChatAgent):
             )
             
         except Exception as e:
-            logger.error(f"ImagePromptAgent错误: {e}")
+            logger.error(f"ImagePromptAgent error: {e}")
             logger.error(traceback.format_exc())
-            return self._create_error_response(f"意外错误: {e}")
+            return self._create_error_response(f"Unexpected error")
 
     def _extract_metadata(self, messages: Sequence[ChatMessage]) -> dict:
-        """从消息中提取图像生成所需的元数据"""
+        """Extract image generation metadata from messages"""
         last_message = messages[-1]
         return {
-            "content": last_message.get("content", ""),
+            "content": last_message.content,
             "image_style": random.choice(self._image_styles),
         }
 
     async def _generate_prompt(self, image_metadata: dict) -> Optional[str]:
-        """生成优化的图像提示词"""
+        """Generate an optimized image prompt"""
         try:
-            logger.info(f"使用图像风格生成提示词: {image_metadata['image_style']}")
-            prompt = self._prompt_template.format(image_style=image_metadata['image_style'])
+            logger.info(f"Generating prompt with image style: {image_metadata['image_style']}")
             response = await self.text_model_client.create(
                 [
                     SystemMessage(content=self._prompt_template),
                     UserMessage(
-                        content=f"```json\n{json.dumps(image_metadata, ensure_ascii=False)}\n```{prompt}", 
+                        content=f"```json\n{json.dumps(image_metadata, ensure_ascii=False)}\n```",
                         source=self.name
                     ),
                 ],
             )
+            model_api_success_count.inc()
             return response.content
         except Exception as e:
-            logger.error(f"生成图像提示词时出错: {e}")
+            model_api_failure_count.inc()
+            logger.error(f"Error generating image prompt: {e}")
             return None
 
     def _create_error_response(self, error_message: str) -> Response:
@@ -172,7 +171,7 @@ class ImageGenerateAgent(BaseChatAgent):
         try:
             # Get the last message as the image prompt
             last_message = messages[-1]
-            image_prompt = last_message.get("content", "")
+            image_prompt = last_message.content
             if not image_prompt:
                 return self._create_error_response("No image prompt provided")
             # Generate image
