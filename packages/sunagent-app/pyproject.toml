@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sunagent-app"
-version = "0.0.26b8"
+version = "0.0.26b9"
 license = {file = "LICENSE-CODE"}
 description = "sunagent app"
 readme = "README.md"
@@ -18,7 +18,7 @@ dependencies = [
   "autogen-core",
   "openpyxl",
   "autogen-ext",
-  "sunagent-ext==0.0.6b8",
+  "sunagent-ext==0.0.6b9",
   "autogen-agentchat",
   "prometheus_client",
   "autogen",
