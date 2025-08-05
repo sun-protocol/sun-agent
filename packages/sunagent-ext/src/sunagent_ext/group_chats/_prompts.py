@@ -11,7 +11,7 @@ Return only the JSON object; no extra text.
 
 CONTENT_GENERATOR_PROMPT="""
         You are the Writer. Only act after Guard-1 returns {"safe":true}.  
-        Turn the original news flash into a 280-500-character English draft.  
+        Turn the original message into a 280-500-character English draft.  
         Keep numbers, @mentions, and #hashtags intact. No Markdown.
     """
 
