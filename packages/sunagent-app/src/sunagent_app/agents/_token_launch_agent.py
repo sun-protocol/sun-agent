@@ -11,8 +11,6 @@ from typing import (
     Sequence,
 )
 
-from autogen_agentchat.agents import BaseChatAgent
-from autogen_agentchat.base import Response
 from autogen_agentchat.messages import (
     ChatMessage,
     MultiModalMessage,
@@ -24,12 +22,17 @@ from autogen_core.models import (
     SystemMessage,
     UserMessage,
 )
+from autogen_agentchat.conditions import TextMentionTermination, SourceMatchTermination
+from autogen_agentchat.agents import BaseChatAgent
+from autogen_agentchat.base import Response
+from autogen_agentchat.messages import TextMessage
+from autogen_agentchat.teams import RoundRobinGroupChat
+
 from google import genai
-from google.genai import types
 from PIL import Image as PILImage
 
 from sunagent_app.metrics import model_api_failure_count, model_api_success_count
-
+from sunagent_ext.agents._image_generate_agent import ImageGenerateAgent, ImagePromptAgent
 from .._constants import LOGGER_NAME
 from ..sunpump_service import SunPumpService
 from ._http_utils import fetch_url
@@ -53,8 +56,6 @@ class TokenLaunchAgent(BaseChatAgent):
         sunpump_service: SunPumpService,
         model_client: ChatCompletionClient,
         system_message: str,
-        prompt_for_image_prompt: str,
-        image_styles: List[str],
         image_model: str = "imagen-3.0-generate-002",
         width: int = 400,
         height: int = 400,
@@ -64,11 +65,15 @@ class TokenLaunchAgent(BaseChatAgent):
         self._system_message = SystemMessage(content=system_message)
         self._image_model = genai.Client(api_key=os.getenv("GOOGLE_GEMINI_API_KEY"))
         self._model_name = image_model
-        self._prompt_for_image_prompt = SystemMessage(content=prompt_for_image_prompt)
-        self._image_styles = image_styles
         self.width = width
         self.height = height
         self._sunpump_service = sunpump_service
+        self._image_generation_team = self.create_image_generation_team(
+                text_model_client=self._model_client,
+                image_model_client=self._image_model,
+                image_model_name=self._model_name,
+            )
+
 
     @property
     def produced_message_types(self) -> Sequence[type[ChatMessage]]:
@@ -84,6 +89,30 @@ class TokenLaunchAgent(BaseChatAgent):
                         value = block[parameter].strip()
                         if len(value) > 0:
                             informations[parameter] = value
+
+    def create_image_generation_team(
+        self,
+        text_model_client: ChatCompletionClient,
+        image_model_client: Any,
+        image_model_name: str = "imagen-3.0-generate-002",
+    ):
+        prompt_agent = ImagePromptAgent(
+            name="ImagePromptAgent",
+            text_model_client=text_model_client,
+        )
+        generation_agent = ImageGenerateAgent(
+            name="ImageGenerateAgent",
+            image_model_client=image_model_client,
+            image_model_name=image_model_name,
+            width=self.width,
+            height=self.height,
+        )
+
+        return RoundRobinGroupChat(
+            participants=[prompt_agent, generation_agent],
+            termination_condition=SourceMatchTermination(["ImageGenerateAgent"]) | TextMentionTermination("EARLY_TERMINATE"),
+            max_turns=1
+        )
 
     async def on_messages(self, messages: Sequence[ChatMessage], cancellation_token: CancellationToken) -> Response:
         """Process messages and launch token"""
@@ -172,8 +201,7 @@ class TokenLaunchAgent(BaseChatAgent):
         # Use AI model to fill missing info
         if missing_parameters:
             await self._generate_missing_informations(informations, tweet, cancellation_token)
-            await self._generate_missing_image_description(informations, tweet, cancellation_token)
-            
+
         return None
 
     async def _generate_missing_informations(
@@ -203,38 +231,6 @@ class TokenLaunchAgent(BaseChatAgent):
         except Exception as e:
             model_api_failure_count.inc()
             logger.error(f"Error generating missing informations: {e}")
-            raise
-
-    async def _generate_missing_image_description(
-        self, 
-        informations: Dict[str, Optional[str]], 
-        tweet: Dict[str, Any], 
-        cancellation_token: CancellationToken
-    ) -> None:
-        if informations.get("image_description"):
-            return
-        
-        try:
-            result = await self._model_client.create(
-                [
-                    self._prompt_for_image_prompt,
-                    UserMessage(
-                        content=f"```json\n{json.dumps(tweet, ensure_ascii=False)}, image_style: {random.choice(self._image_styles)}\n```",
-                        source="user"
-                    ),
-                ],
-                cancellation_token=cancellation_token,
-            )
-            logger.info(f"generated image description: {result}")
-            model_api_success_count.inc()
-            
-            if isinstance(result.content, str):
-                informations["image_description"] = result.content.strip()
-                logger.info(f"updated image description: {informations.get('image_description')}")
-                
-        except Exception as e:
-            model_api_failure_count.inc()
-            logger.error(f"Error generating image description: {e}")
             raise
 
     async def _check_previous_launch_status(self, username: Optional[str]) -> Optional[Response]:
@@ -271,7 +267,7 @@ class TokenLaunchAgent(BaseChatAgent):
                 return image
         
         # Generate new image
-        return await self._generate_token_image(informations.get("image_description"))
+        return await self._generate_token_image(informations)
 
     async def _fetch_image_from_url(self, image_url: str) -> Optional[PILImage.Image]:
         """Fetch image from URL"""
@@ -283,29 +279,38 @@ class TokenLaunchAgent(BaseChatAgent):
             logger.error(f"Error fetching image from URL {image_url}: {e}")
         return None
 
-    async def _generate_token_image(self, image_description: Optional[str]) -> PILImage.Image | Response:
-        """Generate token image"""
-        logger.info(f"Generating image with prompt: {image_description}")
+    async def _generate_token_image(self, informations: Dict[str, Optional[str]]) -> PILImage.Image | Response:
         try:
-            response = self._image_model.models.generate_images(
-                model=self._model_name,
-                prompt=image_description,
-                config=types.GenerateImagesConfig(
-                    number_of_images=1,
-                    person_generation=types.PersonGeneration.ALLOW_ADULT,
-                ),
+            logger.info(f"Generating image with image generation team, informations: {informations}")
+            initial_message = TextMessage(
+                content=json.dumps(informations),
+                source="user"
             )
-            model_api_success_count.inc()
+            result = await self._image_generation_team.run(
+                task=[initial_message],
+                cancellation_token=CancellationToken()
+            )
             
-            raw_image = response.generated_images[0].image.image_bytes
-            return PILImage.open(BytesIO(raw_image), formats=["JPEG", "PNG"])
+            if result.messages:
+                last_message = result.messages[-1]
+                if isinstance(last_message, MultiModalMessage) and last_message.content:
+                    for content_item in last_message.content:
+                        if isinstance(content_item, Image):
+                            return content_item.to_pil()
+            
+            return Response(
+                chat_message=TextMessage(
+                    content="Image generation team failed to produce an image",
+                    source=self.name,
+                )
+            )
             
         except Exception as e:
             model_api_failure_count.inc()
-            logger.error(f"Error generating image: {e}")
+            logger.error(f"Error using image generation team: {e}")
             return Response(
                 chat_message=TextMessage(
-                    content="Image generate service is busy, tell user try again later",
+                    content="Image generation service is busy, tell user try again later",
                     source=self.name,
                 )
             )
