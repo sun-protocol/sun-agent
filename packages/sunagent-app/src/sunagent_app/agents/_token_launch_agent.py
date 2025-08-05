@@ -1,7 +1,5 @@
 import json
 import logging
-import os
-import io
 from io import BytesIO
 from typing import (
     Any,
@@ -11,6 +9,8 @@ from typing import (
     Sequence,
 )
 
+from autogen_agentchat.agents import BaseChatAgent
+from autogen_agentchat.base import Response, Team
 from autogen_agentchat.messages import (
     ChatMessage,
     MultiModalMessage,
@@ -22,17 +22,10 @@ from autogen_core.models import (
     SystemMessage,
     UserMessage,
 )
-from autogen_agentchat.conditions import TextMentionTermination, SourceMatchTermination
-from autogen_agentchat.agents import BaseChatAgent
-from autogen_agentchat.base import Response
-from autogen_agentchat.messages import TextMessage
-from autogen_agentchat.teams import RoundRobinGroupChat
-
-from google import genai
 from PIL import Image as PILImage
 
 from sunagent_app.metrics import model_api_failure_count, model_api_success_count
-from sunagent_ext.agents._image_generate_agent import ImageGenerateAgent, ImagePromptAgent
+
 from .._constants import LOGGER_NAME
 from ..sunpump_service import SunPumpService
 from ._http_utils import fetch_url
@@ -56,24 +49,17 @@ class TokenLaunchAgent(BaseChatAgent):
         sunpump_service: SunPumpService,
         model_client: ChatCompletionClient,
         system_message: str,
-        image_model: str = "imagen-3.0-generate-002",
+        image_generation_team: Team,
         width: int = 400,
         height: int = 400,
     ) -> None:
         super().__init__(name=name, description=description)
         self._model_client = model_client
         self._system_message = SystemMessage(content=system_message)
-        self._image_model = genai.Client(api_key=os.getenv("GOOGLE_GEMINI_API_KEY"))
-        self._model_name = image_model
         self.width = width
         self.height = height
         self._sunpump_service = sunpump_service
-        self._image_generation_team = self.create_image_generation_team(
-                text_model_client=self._model_client,
-                image_model_client=self._image_model,
-                image_model_name=self._model_name,
-            )
-
+        self._image_generation_team = image_generation_team
 
     @property
     def produced_message_types(self) -> Sequence[type[ChatMessage]]:
@@ -90,30 +76,6 @@ class TokenLaunchAgent(BaseChatAgent):
                         if len(value) > 0:
                             informations[parameter] = value
 
-    def create_image_generation_team(
-        self,
-        text_model_client: ChatCompletionClient,
-        image_model_client: Any,
-        image_model_name: str = "imagen-3.0-generate-002",
-    ):
-        prompt_agent = ImagePromptAgent(
-            name="ImagePromptAgent",
-            text_model_client=text_model_client,
-        )
-        generation_agent = ImageGenerateAgent(
-            name="ImageGenerateAgent",
-            image_model_client=image_model_client,
-            image_model_name=image_model_name,
-            width=self.width,
-            height=self.height,
-        )
-
-        return RoundRobinGroupChat(
-            participants=[prompt_agent, generation_agent],
-            termination_condition=SourceMatchTermination(["ImageGenerateAgent"]) | TextMentionTermination("EARLY_TERMINATE"),
-            max_turns=2
-        )
-
     async def on_messages(self, messages: Sequence[ChatMessage], cancellation_token: CancellationToken) -> Response:
         """Process messages and launch token"""
         # 1. Extract tweet and info
@@ -123,14 +85,12 @@ class TokenLaunchAgent(BaseChatAgent):
         permission_result = self._validate_token_launch_permission(tweet)
         if permission_result:
             return permission_result
-        
+
         # 3. Check and complete missing info
-        completion_result = await self._complete_missing_informations(
-            informations, tweet, cancellation_token
-        )
+        completion_result = await self._complete_missing_informations(informations, tweet, cancellation_token)
         if completion_result:
             return completion_result
-        
+
         # 4. Check previous launch status
         status_result = await self._check_previous_launch_status(informations["username"])
         if status_result:
@@ -140,11 +100,13 @@ class TokenLaunchAgent(BaseChatAgent):
         image_result = await self._get_or_generate_image(tweet, informations)
         if isinstance(image_result, Response):
             return image_result
-        
+
         # 6. Launch token
         return await self._launch_token(informations, image_result)
 
-    def _extract_tweet_and_informations(self, messages: Sequence[ChatMessage]) -> tuple[Dict[str, Any], Dict[str, Optional[str]]]:
+    def _extract_tweet_and_informations(
+        self, messages: Sequence[ChatMessage]
+    ) -> tuple[Dict[str, Any], Dict[str, Optional[str]]]:
         """Extract tweet and related info from messages"""
         tweet: Optional[Dict[str, Any]] = None
         informations: Dict[str, Optional[str]] = {
@@ -155,17 +117,17 @@ class TokenLaunchAgent(BaseChatAgent):
             "tweet_id": None,
             "username": None,
         }
-        
+
         for message in messages:
             if message.source == "user":
                 tweets = extract_tweets_from_markdown_json_blocks(message.content)
                 tweet = tweets[0] if len(tweets) > 0 else None
             elif isinstance(message, TextMessage):
                 self._get_informations_from_message(message, informations)
-        
+
         assert tweet is not None, "No valid tweet found in messages"
         informations["username"] = tweet["author"]
-        
+
         return tweet, informations
 
     def _validate_token_launch_permission(self, tweet: Dict[str, Any]) -> Optional[Response]:
@@ -173,31 +135,25 @@ class TokenLaunchAgent(BaseChatAgent):
         can_launch = tweet.get("can_launch_new_token", "").strip().lower()
         if can_launch != "ok":
             logger.warning(f"Tweet does not allow token launch: {tweet['can_launch_new_token']}")
-            return Response(
-                chat_message=TextMessage(content=tweet["can_launch_new_token"], source=self.name)
-            )
+            return Response(chat_message=TextMessage(content=tweet["can_launch_new_token"], source=self.name))
         return None
 
     async def _complete_missing_informations(
-        self, 
-        informations: Dict[str, Optional[str]], 
-        tweet: Dict[str, Any], 
-        cancellation_token: CancellationToken
+        self, informations: Dict[str, Optional[str]], tweet: Dict[str, Any], cancellation_token: CancellationToken
     ) -> Optional[Response]:
         """Check and complete missing info"""
         missing_parameters = [key for key, value in informations.items() if value is None]
-        
+
         # If critical info missing, ask user
         critical_params = {"name", "symbol", "description"}
         if critical_params.issubset(set(missing_parameters)):
             logger.warning(f"Critical info missing: {missing_parameters}")
             return Response(
                 chat_message=TextMessage(
-                    content=f"ask user for these informations {json.dumps(missing_parameters)}", 
-                    source=self.name
+                    content=f"ask user for these informations {json.dumps(missing_parameters)}", source=self.name
                 )
             )
-        
+
         # Use AI model to fill missing info
         if missing_parameters:
             await self._generate_missing_informations(informations, tweet, cancellation_token)
@@ -205,10 +161,7 @@ class TokenLaunchAgent(BaseChatAgent):
         return None
 
     async def _generate_missing_informations(
-        self, 
-        informations: Dict[str, Optional[str]], 
-        tweet: Dict[str, Any], 
-        cancellation_token: CancellationToken
+        self, informations: Dict[str, Optional[str]], tweet: Dict[str, Any], cancellation_token: CancellationToken
     ) -> None:
         """Use AI model to generate missing info"""
         try:
@@ -221,12 +174,9 @@ class TokenLaunchAgent(BaseChatAgent):
             )
             logger.info(f"generated missing informations: {result}")
             model_api_success_count.inc()
-            
+
             if isinstance(result.content, str):
-                self._get_informations_from_message(
-                    TextMessage(content=result.content, source=self.name), 
-                    informations
-                )
+                self._get_informations_from_message(TextMessage(content=result.content, source=self.name), informations)
                 logger.info(f"generated informations: {json.dumps(informations)}")
         except Exception as e:
             model_api_failure_count.inc()
@@ -247,16 +197,14 @@ class TokenLaunchAgent(BaseChatAgent):
                 )
             elif status not in ["NONE", "CREATED"]:
                 return Response(chat_message=TextMessage(content=status, source=self.name))
-                
+
         except Exception as e:
             logger.error(f"Error checking previous launch status: {e}")
-            
+
         return None
 
     async def _get_or_generate_image(
-        self, 
-        tweet: Dict[str, Any], 
-        informations: Dict[str, Optional[str]]
+        self, tweet: Dict[str, Any], informations: Dict[str, Optional[str]]
     ) -> PILImage.Image | Response:
         """Get or generate token image"""
         # Try to get image from tweet URL
@@ -265,7 +213,7 @@ class TokenLaunchAgent(BaseChatAgent):
             image = await self._fetch_image_from_url(tweet["image_url"])
             if image:
                 return image
-        
+
         # Generate new image
         return await self._generate_token_image(informations)
 
@@ -282,33 +230,31 @@ class TokenLaunchAgent(BaseChatAgent):
     async def _generate_token_image(self, informations: Dict[str, Optional[str]]) -> PILImage.Image | Response:
         try:
             logger.info(f"Generating image with image generation team, informations: {informations}")
-            initial_message = TextMessage(
-                content=json.dumps(informations),
-                source="user"
-            )
+            initial_message = TextMessage(content=json.dumps(informations), source="user")
             result = await self._image_generation_team.run(
-                task=[initial_message],
-                cancellation_token=CancellationToken()
+                task=[initial_message], cancellation_token=CancellationToken()
             )
-            
             if result.messages:
                 last_message = result.messages[-1]
-                if isinstance(last_message, MultiModalMessage) and last_message.content:
-                    for content_item in last_message.content:
-                        if isinstance(content_item, Image):
-                            buffer = io.BytesIO()
-                            image = content_item.image
-                            image.save(buffer, format="PNG")
-                            buffer.seek(0)
-                            return PILImage.open(buffer)
-            
+                
+                if isinstance(last_message, MultiModalMessage):
+                    content = getattr(last_message, 'content', None)
+                    if content and isinstance(content, list):
+                        for content_item in content:
+                            if isinstance(content_item, Image):
+                                return content_item.image
+                elif isinstance(last_message, TextMessage):
+                    logger.warning("Received text message instead of multimodal message from image generation team")
+                else:
+                    logger.warning(f"Unexpected message type: {type(last_message)}")
+
             return Response(
                 chat_message=TextMessage(
                     content="Image generation team failed to produce an image",
                     source=self.name,
                 )
             )
-            
+
         except Exception as e:
             logger.error(f"Error using image generation team: {e}")
             return Response(
@@ -318,14 +264,10 @@ class TokenLaunchAgent(BaseChatAgent):
                 )
             )
 
-    async def _launch_token(
-        self, 
-        informations: Dict[str, Optional[str]], 
-        image: PILImage.Image
-    ) -> Response:
+    async def _launch_token(self, informations: Dict[str, Optional[str]], image: PILImage.Image) -> Response:
         # Resize and convert image
         resized_image = Image.from_pil(image.resize((self.width, self.height)))
-            
+
         try:
             response = await self._sunpump_service.launch_new_token(
                 str(informations["name"]),
@@ -336,18 +278,11 @@ class TokenLaunchAgent(BaseChatAgent):
                 str(informations["username"]),
             )
             logger.info(f"Token Launch Result: {response}")
-            return Response(
-                chat_message=TextMessage(content=f"Token Launch Result:\n{response}", source=self.name)
-            )
+            return Response(chat_message=TextMessage(content=f"Token Launch Result:\n{response}", source=self.name))
         except Exception as e:
             logger.error(f"Error launching token: {e}")
-            return Response(
-                chat_message=TextMessage(
-                    content=f"Failed to launch token: {str(e)}", 
-                    source=self.name
-                )
-            )
+            return Response(chat_message=TextMessage(content=f"Failed to launch token: {str(e)}", source=self.name))
 
     async def on_reset(self, cancellation_token: CancellationToken) -> None:
-        """Reset the assistant agent to its initialization state."""
-        pass
+        await self._image_generation_team.reset()
+
