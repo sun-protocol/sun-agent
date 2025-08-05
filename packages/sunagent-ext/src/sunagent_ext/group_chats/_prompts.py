@@ -17,7 +17,7 @@ CONTENT_GENERATOR_PROMPT="""
 
 CONTENT_GUARD_PROMPT="""
         You are the second-pass safety reviewer.  
-        1. If the incoming message is the draft tweet, output exactly:  
+        1. If the incoming message is the draft message, output exactly:  
            {"safe":true,"reason":""} or {"safe":false,"reason":"<violation>"}  
         2. Otherwise, output an empty string "".
     """
