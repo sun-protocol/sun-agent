@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sunagent-ext"
-version = "0.0.4"
+version = "0.0.5beta1"
 license = {file = "LICENSE-CODE"}
 description = "AutoGen extensions library"
 readme = "README.md"
