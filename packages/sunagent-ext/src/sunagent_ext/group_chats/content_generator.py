@@ -1,5 +1,5 @@
 import asyncio
-from typing import Sequence, List, Optional
+from typing import List, Optional, Sequence
 
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.conditions import SourceMatchTermination, TextMentionTermination
@@ -7,8 +7,12 @@ from autogen_agentchat.teams import RoundRobinGroupChat
 from autogen_core.memory import Memory
 from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
 
-from sunagent_ext.group_chats._prompts import ORIGINAL_GUARD_PROMPT, FORMATTER_PROMPT, CONTENT_GENERATOR_PROMPT, \
-    CONTENT_GUARD_PROMPT
+from sunagent_ext.group_chats._prompts import (
+    CONTENT_GENERATOR_PROMPT,
+    CONTENT_GUARD_PROMPT,
+    FORMATTER_PROMPT,
+    ORIGINAL_GUARD_PROMPT,
+)
 
 
 class ContentGenerator(RoundRobinGroupChat):
@@ -33,22 +37,13 @@ class ContentGenerator(RoundRobinGroupChat):
         prompts: Optional[dict] = None,  # 外部 prompt 字典
         memory: Optional[Sequence[Memory]] = None,
     ):
-
         # 默认 prompt 兜底
 
         _prompts = {
-            "original_guard": (
-                prompts.get("original_guard") or ORIGINAL_GUARD_PROMPT
-            ),
-            "content_guard": (
-                prompts.get("content_guard") or CONTENT_GENERATOR_PROMPT
-            ),
-            "content_generator": (
-                prompts.get("content_generator") or CONTENT_GUARD_PROMPT
-            ),
-            "formatter": (
-                prompts.get("formatter") or FORMATTER_PROMPT
-            ),
+            "original_guard": (prompts.get("original_guard") or ORIGINAL_GUARD_PROMPT),
+            "content_guard": (prompts.get("content_guard") or CONTENT_GENERATOR_PROMPT),
+            "content_generator": (prompts.get("content_generator") or CONTENT_GUARD_PROMPT),
+            "formatter": (prompts.get("formatter") or FORMATTER_PROMPT),
         }
         # 根据 agent_list 动态创建 participant
         available_agents = {
@@ -79,8 +74,5 @@ class ContentGenerator(RoundRobinGroupChat):
 
         super().__init__(
             participants=participants,
-            termination_condition=(
-                SourceMatchTermination(["formatter"])
-                | TextMentionTermination("EARLY_TERMINATE")
-            ),
+            termination_condition=(SourceMatchTermination(["formatter"]) | TextMentionTermination("EARLY_TERMINATE")),
         )
