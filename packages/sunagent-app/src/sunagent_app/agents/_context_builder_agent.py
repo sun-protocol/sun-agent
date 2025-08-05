@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import os
 import time
 import traceback
 from typing import (
@@ -173,13 +172,17 @@ class ContextBuilderAgent:
     """
 
     def __init__(
-        self,
-        agent_id: str,
-        twitter_client: TwitterClient,
-        oauth: OAuth1,
-        cache: Optional[CacheStore] = None,
-        max_depth: int = 5,
-        timeout: int = 30,
+            self,
+            agent_id: str,
+            twitter_client: TwitterClient,
+            oauth: OAuth1,
+            cache: Optional[CacheStore] = None,
+            max_depth: int = 5,
+            timeout: int = 30,
+            block_user_ids = [],
+            white_user_ids = [],
+            reply_freq_limit = 5,
+            max_results = 100
     ) -> None:
         self.agent_id = agent_id
         self.twitter = twitter_client
@@ -199,11 +202,11 @@ class ContextBuilderAgent:
         }
         self.recover_time: Optional[int] = None
         self.run_enabled = True
-        self.block_user_ids = json.loads(os.getenv("BLOCK_USER_IDS", "[]"))
+        self.block_user_ids = block_user_ids
         logger.error(f"block_user_ids: {self.block_user_ids}")
-        self.white_user_ids = json.loads(os.getenv("MENTIONS_WHITE_USER_ID", "[]"))
-        self.reply_freq_limit = int(os.getenv("MAX_REPLY_COUNT", "5"))
-        self.max_results = int(os.getenv("MAX_RESULTS", "100"))
+        self.white_user_ids = white_user_ids
+        self.reply_freq_limit = reply_freq_limit
+        self.max_results = max_results
 
     async def unset_recover_time(self) -> (int, str):
         if self.recover_time is None:

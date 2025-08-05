@@ -1,7 +1,5 @@
-import asyncio
 import json
 import logging
-import os
 import traceback
 from typing import (
     Any,
@@ -14,7 +12,6 @@ from typing import (
 import aiohttp
 
 from ._constants import LOGGER_NAME
-from .agents._http_utils import fetch_url
 
 logger = logging.getLogger(LOGGER_NAME)
 
@@ -22,9 +19,9 @@ logger = logging.getLogger(LOGGER_NAME)
 class SunPumpService:
     DEFAULT_ERROR = "Service is busy"
 
-    def __init__(self, host):
+    def __init__(self, host, sunpump):
         self._host = host
-        self._sunpump = os.getenv("SUNPUMP_HOST")
+        self._sunpump = sunpump
 
     async def query_launch_token_status_by_user(self, username: str) -> str:
         """
