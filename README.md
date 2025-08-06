@@ -42,6 +42,10 @@ source .venv/bin/activate
 
 - `uv sync --all-extras` will create a `.venv` directory at the current level and install packages from the current directory along with any other dependencies. The `all-extras` flag adds optional dependencies.
 - `source .venv/bin/activate` activates the virtual environment.
+##  Build
+```shell
+uv build --all-packages --wheel --out-dir dist
+```
 
 ## use case
 

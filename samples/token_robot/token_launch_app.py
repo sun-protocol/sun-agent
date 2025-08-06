@@ -32,11 +32,9 @@ from autogen_core.models import ModelFamily, UserMessage
 from autogen_ext.cache_store.redis import RedisStore
 from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
 from autogen_ext.tools.mcp import SseServerParams, mcp_server_tools
+from dotenv import load_dotenv
 from quart import Quart, Response, jsonify, request
 from redis import Redis
-from tweepy import Client as TwitterClient
-from tweepy import StreamResponse, TweepyException
-
 from sunagent_app._constants import LOGGER_NAME
 from sunagent_app.agents import (
     ContextBuilderAgent,
@@ -64,7 +62,9 @@ from sunagent_app.templates.twitter_templates import (
     BlockPatterns,
     TweetCheckTemplate,
 )
-from dotenv import load_dotenv
+from tweepy import Client as TwitterClient
+from tweepy import StreamResponse, TweepyException
+
 # 加载 .env 文件
 load_dotenv()
 
