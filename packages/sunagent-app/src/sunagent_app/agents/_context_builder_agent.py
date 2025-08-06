@@ -18,8 +18,8 @@ from typing import (
 
 import pytz
 import requests
-from requests_oauthlib import OAuth1
 from autogen_core import CacheStore
+from requests_oauthlib import OAuth1
 from tweepy import Client as TwitterClient
 from tweepy import (
     Media,
@@ -34,8 +34,16 @@ from tweepy import (
 from tweepy import Response as TwitterResponse
 from tweepy.asynchronous import AsyncStreamingClient
 
+from sunagent_app.metrics import (
+    get_twitter_quota_limit,
+    post_twitter_quota_limit,
+    read_tweet_failure_count,
+    read_tweet_success_count,
+    tweet_failure_count,
+    tweet_success_count,
+)
+
 from .._constants import LOGGER_NAME
-from sunagent_app.metrics import tweet_success_count,tweet_failure_count,read_tweet_failure_count,read_tweet_success_count,get_twitter_quota_limit,post_twitter_quota_limit
 
 logger = logging.getLogger(LOGGER_NAME)
 
@@ -491,7 +499,7 @@ class ContextBuilderAgent:
                             f"MENTIONS_TIMELINE has no quota, recover_time={self.quota['MENTIONS_TIMELINE'].recover_time()}"
                         )
                         get_twitter_quota_limit.labels(agent_id=self.agent_id, action="MENTIONS_TIMELINE").inc()
-                        
+
                         if self.cache:
                             self.cache.delete(cache_key)
                         next_token = None
@@ -762,9 +770,7 @@ class ContextBuilderAgent:
             # Step2: Append media chunk of bytes using the APPEND command
             upload_url = f"https://api.twitter.com/2/media/upload/{media_id}/append"
 
-            request_data = {
-                "segment_index": 0
-            }
+            request_data = {"segment_index": 0}
 
             files = {
                 "media": image_bytes,
@@ -868,9 +874,7 @@ class ContextBuilderAgent:
             return
         freq = await self._get_freq(tweet)
         try:
-            self.cache.set(
-                f"{self.agent_id}:{FREQ_KEY_PREFIX}{tweet['conversation_id']}", str(freq + 1)
-            )
+            self.cache.set(f"{self.agent_id}:{FREQ_KEY_PREFIX}{tweet['conversation_id']}", str(freq + 1))
         except Exception:
             pass
 

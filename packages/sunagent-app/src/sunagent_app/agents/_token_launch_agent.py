@@ -32,11 +32,12 @@ from google import genai
 from google.genai import types
 from PIL import Image as PILImage
 
+from sunagent_app.metrics import model_api_failure_count, model_api_success_count
+
 from .._constants import LOGGER_NAME
 from ..sunpump_service import SunPumpService
 from ._http_utils import fetch_url
 from ._markdown_utils import extract_markdown_json_blocks, extract_tweets_from_markdown_json_blocks
-from sunagent_app.metrics import model_api_success_count,model_api_failure_count
 
 logger = logging.getLogger(LOGGER_NAME)
 

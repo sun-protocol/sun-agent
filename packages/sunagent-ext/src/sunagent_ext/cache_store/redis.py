@@ -1,8 +1,8 @@
 from typing import Any, Dict, Optional, TypeVar, cast
 
 import redis
-from pydantic import BaseModel
 from autogen_core import CacheStore, Component
+from pydantic import BaseModel
 from typing_extensions import Self
 
 T = TypeVar("T")

@@ -20,7 +20,7 @@ from autogen_ext.models.openai import AzureOpenAIChatCompletionClient
 
 from sunagent_app._constants import LOGGER_NAME
 from sunagent_app.agents._markdown_utils import extract_json_from_string
-from sunagent_app.metrics import model_api_failure_count,model_api_success_count
+from sunagent_app.metrics import model_api_failure_count, model_api_success_count
 
 logger = logging.getLogger(LOGGER_NAME)
 
