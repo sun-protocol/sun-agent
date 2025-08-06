@@ -1,8 +1,10 @@
+from typing import List
+
 from autogen_core.memory import MemoryContent
 from sunagent_ext.memory import ProfileListMemory, ProfileListMemoryConfig
 
 
-def get_profile_memory():
+def get_profile_memory() -> List[ProfileListMemory]:
     """
     The profile memory related
 
@@ -58,7 +60,7 @@ def get_profile_memory():
     return [profile_base, profile_direction]
 
 
-def get_sungenx_profile_memory():
+def get_sungenx_profile_memory() -> List[ProfileListMemory]:
     """
     The profile memory related
 

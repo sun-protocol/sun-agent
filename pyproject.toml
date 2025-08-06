@@ -1,6 +1,6 @@
 [dependency-groups]
 dev = [
-    "pyright==1.1.389",
+    "pyright>=1.1.389",
     "mypy==1.13.0",
     "ruff==0.4.8",
     "pytest",

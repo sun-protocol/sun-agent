@@ -26,14 +26,18 @@ dependencies = [
   "flask_cors",
   "quart",
   "tweepy",
+  "aiohttp",
   "async_lru",
   "apscheduler",
+  "oauthlib",
   "pytz",
   "google-genai",
 ]
 
 [dependency-groups]
 dev = [
+  "types-pytz",
+  "types-requests",
 ]
 
 [tool.hatch.version]
@@ -49,6 +53,9 @@ include = ["src/**", "tests/*.py"]
 [tool.pyright]
 extends = "../../pyproject.toml"
 include = ["tests"]
+
+[tool.mypy.overrides]
+"tweepy" = { ignore_errors = true }
 
 [tool.pytest.ini_options]
 minversion = "6.0"

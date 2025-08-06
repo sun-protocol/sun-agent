@@ -4,6 +4,7 @@ import random
 import traceback
 from io import BytesIO
 from typing import (
+    Dict,
     List,
     Optional,
     Sequence,
@@ -94,13 +95,13 @@ class ImageGenerateAgent(BaseChatAgent):
             logger.error(traceback.format_exc())
             return self._create_error_response(f"Unexpected error: {e}")
 
-    def get_image_generation_metadata(self, messages: Sequence[ChatMessage]) -> Optional[dict]:
+    def get_image_generation_metadata(self, messages: Sequence[ChatMessage]) -> Optional[Dict[str, str]]:
         """Extract the metadata required for image generation from the messages."""
         for message in messages:
-            if message.source == "ImageAdvisor":
+            if message.source == "ImageAdvisor" and isinstance(message, TextMessage):
                 try:
                     reply_msg = extract_json_from_string(message.content)
-                    if reply_msg.get("need_image"):
+                    if reply_msg is not None and reply_msg.get("need_image"):
                         return {
                             "last_tweet": reply_msg.get("last_tweet", ""),
                             "content": reply_msg.get("content", ""),
@@ -110,7 +111,7 @@ class ImageGenerateAgent(BaseChatAgent):
                     logger.error(f"Error extracting image metadata: {e}")
         return None
 
-    async def _generate_image_prompt(self, image_metadata: dict) -> Optional[str]:
+    async def _generate_image_prompt(self, image_metadata: Dict[str, str]) -> Optional[str]:
         """Generate an optimized image prompt."""
         try:
             logger.info(f"Generating image with style: {image_metadata['image_style']}")
@@ -127,6 +128,7 @@ class ImageGenerateAgent(BaseChatAgent):
                     ),
                 ]
             )
+            assert isinstance(response.content, str)
             return response.content
         except Exception as e:
             logger.error(f"Error generating image prompt: {e}")
@@ -142,14 +144,20 @@ class ImageGenerateAgent(BaseChatAgent):
                 config=types.GenerateImagesConfig(number_of_images=1),
             )
             model_api_success_count.inc()
-            raw_image = response.generated_images[0].image.image_bytes
-            image = PILImage.open(BytesIO(raw_image), formats=["PNG"])
-            return image.resize((self.width, self.height))
+            if (
+                response.generated_images is not None
+                and len(response.generated_images) > 0
+                and response.generated_images[0].image is not None
+                and response.generated_images[0].image.image_bytes is not None
+            ):
+                raw_image = response.generated_images[0].image.image_bytes
+                image = PILImage.open(BytesIO(raw_image), formats=["PNG"])
+                return image.resize((self.width, self.height))
         except Exception as e:
             logger.error(f"Error generating image: {e}")
             model_api_failure_count.inc()
             logger.error(traceback.format_exc())
-            return None
+        return None
 
     def _create_no_image_response(self) -> Response:
         return Response(

@@ -1,6 +1,7 @@
 import json
 import logging
 from typing import (
+    List,
     Optional,
     Sequence,
 )
@@ -54,15 +55,18 @@ class ImageAnalysisAgent(BaseChatAgent):
         image: Optional[Image] = None
         image_description: Optional[str] = None
         for message in messages:
-            if message.source == "ImageAdvisor":
+            if message.source == "ImageAdvisor" and isinstance(message, TextMessage):
                 reply_msg = extract_json_from_string(message.content)
-                description = {"last_tweet": reply_msg["last_tweet"], "content": reply_msg["content"]}
-                image_description = json.dumps(description, ensure_ascii=False)
-            elif message.source == "ImageGenerator":
+                if reply_msg is not None:
+                    description = {"last_tweet": reply_msg["last_tweet"], "content": reply_msg["content"]}
+                    image_description = json.dumps(description, ensure_ascii=False)
+            elif message.source == "ImageGenerator" and isinstance(message.content[0], Image):
                 image = message.content[0]
-
         if image is None:
             return Response(chat_message=TextMessage(content="no image provided", source=self.name))
+        if image_description is None:
+            return Response(chat_message=TextMessage(content="no image description provided", source=self.name))
+
         try:
             image_analysis_result = await self._model_client.create(
                 [
@@ -73,7 +77,11 @@ class ImageAnalysisAgent(BaseChatAgent):
                 ],
             )
             model_api_success_count.inc()
+            assert(isinstance(image_analysis_result.content, str))
             extracted_json = extract_json_from_string(image_analysis_result.content)
+            if extracted_json is None:
+                return Response(chat_message=TextMessage(content="Failed to evaluate image, TERMINATE immediately",source=self.name))
+
             if extracted_json["score"] > 0.7:
                 logger.info(f"Image passed check with score {extracted_json["score"]}, {extracted_json["reason"]}")
                 return Response(chat_message=MultiModalMessage(content=[image], source=self.name))

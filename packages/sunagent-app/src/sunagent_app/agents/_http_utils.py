@@ -9,7 +9,7 @@ from .._constants import LOGGER_NAME
 logger = logging.getLogger(LOGGER_NAME)
 
 
-async def fetch_url(url) -> Optional[bytes]:
+async def fetch_url(url: str) -> Optional[bytes]:
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:

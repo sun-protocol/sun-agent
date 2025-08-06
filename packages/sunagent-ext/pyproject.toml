@@ -15,12 +15,18 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "onepassword-sdk>=0.3.0",
     "autogen-core==0.4.9",
-    "aiohttp"
+    "aiohttp",
+    "onepassword-sdk>=0.3.0",
+    "pytz",
+    "redis",
+    "requests",
 ]
 
 [project.optional-dependencies]
+dev = [
+  "types-requests",
+]
 langchain = ["langchain_core~= 0.3.3"]
 azure = [
     "azure-ai-inference>=1.0.0b7",
