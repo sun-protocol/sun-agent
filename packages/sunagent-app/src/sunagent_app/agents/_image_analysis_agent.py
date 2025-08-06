@@ -77,10 +77,14 @@ class ImageAnalysisAgent(BaseChatAgent):
                 ],
             )
             model_api_success_count.inc()
-            assert(isinstance(image_analysis_result.content, str))
+            assert isinstance(image_analysis_result.content, str)
             extracted_json = extract_json_from_string(image_analysis_result.content)
             if extracted_json is None:
-                return Response(chat_message=TextMessage(content="Failed to evaluate image, TERMINATE immediately",source=self.name))
+                return Response(
+                    chat_message=TextMessage(
+                        content="Failed to evaluate image, TERMINATE immediately", source=self.name
+                    )
+                )
 
             if extracted_json["score"] > 0.7:
                 logger.info(f"Image passed check with score {extracted_json["score"]}, {extracted_json["reason"]}")
