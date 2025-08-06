@@ -41,11 +41,13 @@ class ContentGenerator(RoundRobinGroupChat):
         # 默认 prompt 兜底
 
         _prompts = {
-            "original_guard": (prompts and prompts.get("original_guard") or ORIGINAL_GUARD_PROMPT),
-            "content_guard": (prompts and prompts.get("content_guard") or CONTENT_GENERATOR_PROMPT),
-            "content_generator": (prompts and prompts.get("content_generator") or CONTENT_GUARD_PROMPT),
-            "formatter": (prompts and prompts.get("formatter") or FORMATTER_PROMPT),
+            "original_guard": ORIGINAL_GUARD_PROMPT,
+            "content_guard": CONTENT_GENERATOR_PROMPT,
+            "content_generator": CONTENT_GUARD_PROMPT,
+            "formatter": FORMATTER_PROMPT,
         }
+        if prompts is not None:
+            _prompts.update(prompts)
         # 根据 agent_list 动态创建 participant
         available_agents = {
             "original_guard": AssistantAgent(
