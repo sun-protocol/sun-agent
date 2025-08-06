@@ -1,0 +1,170 @@
+name: Checks
+
+on:
+  push:
+    branches:
+      - main
+      - staging
+  pull_request:
+    branches:
+      - main
+      - staging
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          version: "0.5.18"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: uv sync --all-extras
+        working-directory: ./
+      - name: Run task
+        run: |
+          source ${{ github.workspace }}/.venv/bin/activate
+          poe fmt --check
+        working-directory: ./
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          version: "0.5.18"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: uv sync --all-extras
+        working-directory: ./
+      - name: Run task
+        run: |
+          source ${{ github.workspace }}/.venv/bin/activate
+          poe lint
+        working-directory: ./
+
+  mypy:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package:
+          [
+            "./packages/sunagent-app",
+            "./packages/sunagent-ext",
+          ]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          version: "0.5.18"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: uv sync --all-extras
+        working-directory: ./
+      - name: Run task
+        run: |
+          source ${{ github.workspace }}/.venv/bin/activate
+          poe --directory ${{ matrix.package }} mypy
+        working-directory: ./
+
+  pyright:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package:
+          [
+            "./packages/sunagent-app",
+            "./packages/sunagent-ext",
+          ]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          version: "0.5.18"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: uv sync --all-extras
+        working-directory: ./
+      - name: Run task
+        run: |
+          source ${{ github.workspace }}/.venv/bin/activate
+          poe --directory ${{ matrix.package }} pyright
+        working-directory: ./
+
+#   test:
+#     runs-on: ubuntu-latest
+#     strategy:
+#       matrix:
+#         package:
+#           [
+#             "./packages/sunagent-app",
+#             "./packages/sunagent-ext",
+#             # Need API-KEY
+#           ]
+#     steps:
+#       - uses: actions/checkout@v4
+#       - uses: astral-sh/setup-uv@v5
+#         with:
+#           enable-cache: true
+#           version: "0.5.18"
+#       - uses: actions/setup-python@v5
+#         with:
+#           python-version: "3.11"
+#       - name: Run uv sync
+#         run: |
+#           uv sync --all-extras
+# 
+#         working-directory: ./
+#       - name: Run task
+#         run: |
+#           source ${{ github.workspace }}/.venv/bin/activate
+#           poe --directory ${{ matrix.package }} test
+#         working-directory: ./
+
+#   codecov:
+#     runs-on: ubuntu-latest
+#     strategy:
+#       matrix:
+#         package:
+#           [
+#             "./packages/sunagent-app",
+#             "./packages/sunagent-ext",
+#           ]
+#     steps:
+#       - uses: actions/checkout@v4
+#       - uses: astral-sh/setup-uv@v5
+#         with:
+#           enable-cache: true
+#           version: "0.5.18"
+#       - uses: actions/setup-python@v5
+#         with:
+#           python-version: "3.11"
+#       - name: Run uv sync
+#         run: |
+#           uv sync --all-extras
+# 
+#         working-directory: ./
+#       - name: Run task
+#         run: |
+#           source ${{ github.workspace }}/.venv/bin/activate
+#           poe --directory ${{ matrix.package }} test
+#         working-directory: ./
+#       #- name: Upload coverage
+#       #  uses: codecov/codecov-action@v5
+#       #  with:
+#       #    fail_ci_if_error: true # optional (default = false)
+#       #    files: ${{ matrix.package }}/coverage.xml # optional
+#       #    flags: unittests # optional
+#       #    name: codecov-umbrella # optional
+#       #    verbose: true # optional (default = false)
+#       #    token: ${{ secrets.CODECOV_TOKEN }}
