@@ -1,3 +1,10 @@
+IMAGE_STYLES = [
+    "Studio Ghibli style, magical atmosphere, hand-drawn look, soft colors",
+    "dynamic cartoon-style illustration",
+    "papercraft, kirigami style, layered paper, paper quilling, diorama, made of paper, 3D paper art",
+    "claymation character, stop-motion animation style, made of plasticine, fingerprint details, in the style of Aardman Animations",
+]
+
 PROMPT_FOR_IMAGE_PROMPT = """
 # Your Task
 Generate a vivid, detailed image prompt based on the input content. The prompt should:

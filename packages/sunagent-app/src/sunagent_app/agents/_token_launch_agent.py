@@ -212,7 +212,7 @@ class TokenLaunchAgent(BaseChatAgent):
             logger.info(f"Fetching image from URL: {tweet['image_url']}")
             image = await self._fetch_image_from_url(tweet["image_url"])
             if image:
-                return image
+                return image.resize(self.width, self.height)
 
         # Generate new image
         return await self._generate_token_image(informations)
@@ -266,7 +266,7 @@ class TokenLaunchAgent(BaseChatAgent):
 
     async def _launch_token(self, informations: Dict[str, Optional[str]], image: PILImage.Image) -> Response:
         # Resize and convert image
-        resized_image = Image.from_pil(image.resize((self.width, self.height)))
+        resized_image = Image.from_pil(image)
 
         try:
             response = await self._sunpump_service.launch_new_token(

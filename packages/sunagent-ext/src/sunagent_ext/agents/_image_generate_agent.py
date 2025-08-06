@@ -25,7 +25,7 @@ from PIL import Image as PILImage
 from sunagent_app._constants import LOGGER_NAME
 from sunagent_app.metrics import model_api_failure_count, model_api_success_count
 
-from ._prompts import PROMPT_FOR_IMAGE_PROMPT
+from ._prompts import IMAGE_STYLES, PROMPT_FOR_IMAGE_PROMPT
 
 logger = logging.getLogger(LOGGER_NAME)
 
@@ -42,23 +42,18 @@ def extract_message_content(message: ChatMessage) -> str:
 
 
 class ImagePromptAgent(BaseChatAgent):
-    _image_styles = [
-        "Studio Ghibli style, magical atmosphere, hand-drawn look, soft colors",
-        "dynamic cartoon-style illustration",
-        "papercraft, kirigami style, layered paper, paper quilling, diorama, made of paper, 3D paper art",
-        "claymation character, stop-motion animation style, made of plasticine, fingerprint details, in the style of Aardman Animations",
-    ]
-
     def __init__(
         self,
         name: str,
         text_model_client: AzureOpenAIChatCompletionClient,
         *,
+        image_styles: Sequence[str] = IMAGE_STYLES,
         prompt_for_image_prompt: str = PROMPT_FOR_IMAGE_PROMPT,
         description: str = "Responsible for analyzing content and generating optimized image prompts",
     ) -> None:
         super().__init__(name=name, description=description)
         self.text_model_client = text_model_client
+        self._image_styles = image_styles
         self._prompt_for_image_prompt = prompt_for_image_prompt
 
     @property
