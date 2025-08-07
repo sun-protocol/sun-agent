@@ -25,6 +25,7 @@ _ParamsMappingKeyType: TypeAlias = str | bytes | int | float
 _ParamsMappingValueType: TypeAlias = str | bytes | int | float | Iterable[str | bytes | int | float] | None
 if TYPE_CHECKING:
     from _typeshed import SupportsItems, SupportsRead
+
     _ParamsType: TypeAlias = (
         SupportsItems[_ParamsMappingKeyType, _ParamsMappingValueType]
         | tuple[_ParamsMappingKeyType, _ParamsMappingValueType]
@@ -57,7 +58,8 @@ else:
         Iterable[bytes]
         | str
         | bytes
-        | IO[str] | IO[bytes]
+        | IO[str]
+        | IO[bytes]
         | list[tuple[Any, Any]]
         | tuple[tuple[Any, Any], ...]
         | Mapping[Any, Any]
