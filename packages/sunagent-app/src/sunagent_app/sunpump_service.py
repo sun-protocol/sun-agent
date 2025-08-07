@@ -19,7 +19,7 @@ logger = logging.getLogger(LOGGER_NAME)
 class SunPumpService:
     DEFAULT_ERROR = "Service is busy"
 
-    def __init__(self, host, sunpump):
+    def __init__(self, host:str, sunpump:str):
         self._host = host
         self._sunpump = sunpump
 

@@ -13,7 +13,7 @@ from typing import (
     cast,
 )
 
-import requests
+import requests # type: ignore
 from requests_oauthlib import OAuth1
 from sunagent_ext.cache_store import CacheStore
 from sunagent_ext.utils import (
@@ -165,16 +165,16 @@ class ContextBuilderAgent:
     3. 处理API限制和错误重试
     """
 
-    def __init__(
+    def __init__( # type: ignore
             self,
             agent_id: str,
             twitter_client: TwitterClient,
             oauth: OAuth1,
-            cache: Optional[CacheStore] = None,
+            cache: Optional[CacheStore[str]] = None,
             max_depth: int = 5,
             timeout: int = 30,
-            block_user_ids = [],
-            white_user_ids = [],
+            block_user_ids = None,
+            white_user_ids = None,
             reply_freq_limit = 5,
             max_results = 100
     ) -> None:
@@ -196,9 +196,9 @@ class ContextBuilderAgent:
         }
         self.recover_time: Optional[int] = None
         self.run_enabled = True
-        self.block_user_ids = block_user_ids
+        self.block_user_ids = block_user_ids or []
         logger.error(f"block_user_ids: {self.block_user_ids}")
-        self.white_user_ids = white_user_ids
+        self.white_user_ids = white_user_ids or []
         self.reply_freq_limit = reply_freq_limit
         self.max_results = max_results
 
