@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import os
 import time
 import traceback
 from typing import (
@@ -10,18 +9,11 @@ from typing import (
     Dict,
     List,
     Optional,
-    Tuple,
-    cast,
 )
 
 import requests
+from autogen_core import CacheStore
 from requests_oauthlib import OAuth1
-from sunagent_ext.cache_store import CacheStore
-from sunagent_ext.utils import (
-    DailyRateLimit,
-    RateLimit,
-    TimeoutSession,
-)
 from tweepy import Client as TwitterClient
 from tweepy import (
     Media,
@@ -49,6 +41,7 @@ from sunagent_app.metrics import (
 )
 
 from .._constants import LOGGER_NAME
+from ..utils import DailyRateLimit, RateLimit
 
 logger = logging.getLogger(LOGGER_NAME)
 
@@ -148,14 +141,26 @@ USER_FIELDS = [
 PLACE_FIELDS = ["contained_within", "country", "country_code", "full_name", "geo", "id", "name", "place_type"]
 
 
-class MentionStream(AsyncStreamingClient):  # type: ignore[misc,no-any-unimported]
-    def __init__(self, on_response: Callable[[StreamResponse, str], None], **kwargs: Any) -> None:  # type: ignore[no-any-unimported]
+class TimeoutSession(requests.Session):
+    def __init__(self, timeout=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.timeout = timeout  # Default timeout for all requests
+
+    def request(self, method, url, **kwargs):
+        # Use the session's timeout if not specified in the request
+        if kwargs.get("timeout") is None:
+            kwargs["timeout"] = self.timeout
+        return super().request(method, url, **kwargs)
+
+
+class MentionStream(AsyncStreamingClient):
+    def __init__(self, on_response: Callable[[StreamResponse, str], None], **kwargs):
         super().__init__(**kwargs)
         self._on_response = on_response
 
-    async def on_response(self, response: StreamResponse) -> None:  # type: ignore[no-any-unimported]
+    async def on_response(self, response: StreamResponse) -> None:
         cache_key = f"{self.agent_id}:{MENTIONS_TIMELINE_ID}"
-        await self._on_response(response, cache_key)  # type: ignore[misc]
+        await self._on_response(response, cache_key)
 
 
 class ContextBuilderAgent:
@@ -166,14 +171,18 @@ class ContextBuilderAgent:
     3. 处理API限制和错误重试
     """
 
-    def __init__(  # type: ignore[no-any-unimported]
+    def __init__(
         self,
         agent_id: str,
         twitter_client: TwitterClient,
         oauth: OAuth1,
-        cache: Optional[CacheStore[str]] = None,
+        cache: Optional[CacheStore] = None,
         max_depth: int = 5,
         timeout: int = 30,
+        block_user_ids=None,
+        white_user_ids=None,
+        reply_freq_limit=5,
+        max_results=100,
     ) -> None:
         self.agent_id = agent_id
         self.twitter = twitter_client
@@ -183,7 +192,7 @@ class ContextBuilderAgent:
         self.cache = cache
         self.max_depth = max_depth
         self.retry_limit = 2
-        self.me: Optional[User] = None  # type: ignore[no-any-unimported]
+        self.me: Optional[User] = None
         self.quota: Dict[str, RateLimit] = {
             "HOME_TIMELINE": RateLimit(5, 900),
             "MENTIONS_TIMELINE": RateLimit(10, 900),
@@ -193,13 +202,13 @@ class ContextBuilderAgent:
         }
         self.recover_time: Optional[int] = None
         self.run_enabled = True
-        self.block_user_ids = json.loads(os.getenv("BLOCK_USER_IDS", "[]"))
+        self.block_user_ids = block_user_ids or []
         logger.error(f"block_user_ids: {self.block_user_ids}")
-        self.white_user_ids = json.loads(os.getenv("MENTIONS_WHITE_USER_ID", "[]"))
-        self.reply_freq_limit = int(os.getenv("MAX_REPLY_COUNT", "5"))
-        self.max_results = int(os.getenv("MAX_RESULTS", "100"))
+        self.white_user_ids = white_user_ids or []
+        self.reply_freq_limit = reply_freq_limit
+        self.max_results = max_results
 
-    async def unset_recover_time(self) -> Tuple[int, str]:
+    async def unset_recover_time(self) -> (int, str):
         if self.recover_time is None:
             return 0, str(self.recover_time)
         if self.recover_time > int(time.time()):
@@ -208,7 +217,7 @@ class ContextBuilderAgent:
         self.recover_time = None
         return 0, str(self.recover_time)
 
-    async def init_me(self) -> None:
+    async def init_me(self):
         if self.me is None:
             response = self.twitter.get_me(
                 user_auth=self.user_auth,
@@ -216,7 +225,7 @@ class ContextBuilderAgent:
             )
             self.me = response.data
 
-    async def set_recover_time(self, recover_time: int) -> Tuple[int, str]:
+    async def set_recover_time(self, recover_time: int) -> (int, str):
         if self.recover_time == recover_time:
             return 0, str(self.recover_time)
         elif recover_time <= int(time.time()):
@@ -225,7 +234,7 @@ class ContextBuilderAgent:
             self.recover_time = recover_time
         return 0, str(self.recover_time)
 
-    async def create_tweet(self, kwargs: Dict[str, Any]) -> Tuple[int, str]:
+    async def create_tweet(self, kwargs: Dict[str, Any]) -> (int, str):
         if not self.run_enabled:
             return 403, "service not available"
         if not self.quota["POST_TWEET"].acquire_quota():
@@ -239,7 +248,7 @@ class ContextBuilderAgent:
         try:
             response = self.twitter.create_tweet(**kwargs)
             if "in_reply_to_tweet_id" in kwargs:
-                await self._mark_tweet_process(str(kwargs["in_reply_to_tweet_id"]))
+                self._mark_tweet_process(str(kwargs["in_reply_to_tweet_id"]))
             logger.info(f"create_tweet succeed. {response.data}")
             post_tweet_success_count.inc()
             return 0, str(response.data["id"])
@@ -295,7 +304,7 @@ class ContextBuilderAgent:
 
     async def subscribe(self, mention_stream: MentionStream) -> bool:
         try:
-            rule = StreamRule(tag=f"{self.agent_id}:{MENTIONS_TIMELINE_ID}", value=f"@{self.me.username} -is:retweet")  # type: ignore[union-attr]
+            rule = StreamRule(tag=f"{self.agent_id}:{MENTIONS_TIMELINE_ID}", value=f"@{self.me.username} -is:retweet")
             await mention_stream.add_rules(rule, dry_run=1)
             mention_stream.filter(
                 tweet_fields=TWEET_FIELDS,
@@ -319,7 +328,7 @@ class ContextBuilderAgent:
         if not self.run_enabled:
             logger.info("service not available")
             return "[]"
-        tweets: List[Dict[str, Any]] = []
+        tweets: List[str] = []
         since_id: Optional[str] = None
         cache_key = f"{self.agent_id}:{HOME_TIMELINE_ID}"
         if self.quota["POST_TWEET"].remain_quota() == 0:
@@ -400,7 +409,7 @@ class ContextBuilderAgent:
 
     async def get_mentions_with_context(self) -> str:
         def filter_tweet(tweet: Dict[str, Any]) -> bool:
-            return bool(tweet["mentions_me"])
+            return tweet["mentions_me"]
 
         """
         Get the new tweets with full conversation context that mentions me since last time.
@@ -436,7 +445,7 @@ class ContextBuilderAgent:
                 while True:
                     # get page of tweets from since_id
                     response = self.twitter.get_users_mentions(
-                        id=self.me.id,  # type: ignore[union-attr]
+                        id=self.me.id,
                         tweet_fields=TWEET_FIELDS,
                         expansions=EXPANSIONS,
                         media_fields=MEDIA_FIELDS,
@@ -493,18 +502,18 @@ class ContextBuilderAgent:
             await asyncio.sleep(2**attempt)  # 指数退避
         return json.dumps(tweets, ensure_ascii=False, default=str)
 
-    async def on_twitter_response(  # type: ignore[no-any-unimported]
+    async def on_twitter_response(
         self,
         response: Response | StreamResponse,
         filter_func: Callable[[Dict[str, Any]], bool] = (lambda x: True),
-    ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
+    ) -> (List[Dict[str, Any]], Optional[int]):
         tweets: List[Dict[str, Any]] = []
         next_token = response.meta["next_token"] if "next_token" in response.meta else None
         if response.meta["result_count"] == 0 or response.data is None:
             assert next_token is None
             return tweets, next_token
-        users: Dict[str, User] = self._build_users(response.includes)  # type: ignore[no-any-unimported]
-        medias: Dict[str, Media] = self._build_medias(response.includes)  # type: ignore[no-any-unimported]
+        users: Dict[str, User] = self._build_users(response.includes)
+        medias: Dict[str, Media] = self._build_medias(response.includes)
         all_tweets = self._get_all_tweets(response, users, medias)
         if len(all_tweets) > 0:
             logger.info(f"first tweet id {all_tweets[0]["id"]}")
@@ -517,7 +526,7 @@ class ContextBuilderAgent:
             host_tweet = await self.get_tweet(conversation_id)
             freq = await self._get_freq(tweet)
             if (
-                tweet["author_id"] == self.me.data["id"]  # type: ignore[union-attr]
+                tweet["author_id"] == self.me.data["id"]
                 or self.block_user_ids.count(int(tweet["author_id"])) != 0
                 or is_processed
                 or not filter_func(tweet)
@@ -596,8 +605,8 @@ class ContextBuilderAgent:
                     logger.error(f"error get_tweet {str(response)}")
                     return None
                 tweet: Dict[str, Any] = response.data.data
-                users: Dict[str, User] = self._build_users(response.includes)  # type: ignore[misc,no-any-unimported]
-                medias: Dict[str, Media] = self._build_medias(response.includes)  # type: ignore[misc,no-any-unimported]
+                users: Dict[str, User] = self._build_users(response.includes)
+                medias: Dict[str, Media] = self._build_medias(response.includes)
                 self._format_tweet_data(tweet, users, medias)
                 return tweet
             except Forbidden as e:
@@ -633,7 +642,7 @@ class ContextBuilderAgent:
         simplified_tweet["sampling_quote"] = "referenced_tweets" not in tweet or len(tweet["referenced_tweets"]) == 0
         return simplified_tweet
 
-    async def reply_to_tweet_with_image(self, tweet_id: str, text: str, image_bytes: bytes) -> Optional[Dict[str, Any]]:
+    async def reply_to_tweet_with_image(self, tweet_id, text, image_bytes):
         """
         Main function to reply to a tweet with an image
 
@@ -656,12 +665,12 @@ class ContextBuilderAgent:
 
             if data and data["id"]:
                 logger.info(f"Successfully posted tweet reply! Tweet ID: {data['id']}")
-            return cast(Dict[str, Any], data)
+            return data
         except Exception as e:
             logger.error(f"Tweet with image post failed: {e}")
             raise e
 
-    async def create_tweet_with_image(self, text: str, image_bytes: bytes) -> Optional[Dict[str, Any]]:
+    async def create_tweet_with_image(self, text, image_bytes):
         """
         Main function to reply to a tweet with an image
 
@@ -685,13 +694,13 @@ class ContextBuilderAgent:
             if data and data["id"]:
                 logger.info(f"Successfully posted tweet reply! Tweet ID: {data['id']}")
             post_tweet_success_count.inc()
-            return cast(Dict[str, Any], data)
+            return data
         except Exception as e:
             logger.error(f"Tweet with image post failed: {e}")
             post_tweet_failure_count.inc()
             raise e
 
-    def image_upload_with_v2(self, image_bytes: bytes) -> int:
+    def image_upload_with_v2(self, image_bytes) -> int:
         """
         Upload image using Twitter API V2 (avoid blocking)
 
@@ -699,7 +708,7 @@ class ContextBuilderAgent:
             image_bytes: Image bytes
 
         Returns:
-            media_id: int
+            dict: Tweet response data if successful, None otherwise
         """
         try:
             # Step1: Initialize Media Upload
@@ -751,7 +760,7 @@ class ContextBuilderAgent:
             logger.error(f"An unexpected error occurred: {e}")
             raise e
 
-    def _format_tweet_data(self, tweet: Dict[str, Any], users: Dict[str, User], medias: Dict[str, Media]) -> None:  # type: ignore[no-any-unimported]
+    def _format_tweet_data(self, tweet: Dict[str, Any], users: Dict[str, User], medias: Dict[str, Media]) -> None:
         """标准化推文内容"""
         author_id = tweet["author_id"]
         user = users[author_id] if author_id in users else None
@@ -762,7 +771,7 @@ class ContextBuilderAgent:
             if user and "affiliation" in user and "description" in user["affiliation"]
             else False
         )
-        tweet["mentions_me"] = "in_reply_to_user_id" in tweet and tweet["in_reply_to_user_id"] == self.me.data["id"]  # type: ignore[union-attr]
+        tweet["mentions_me"] = "in_reply_to_user_id" in tweet and tweet["in_reply_to_user_id"] == self.me.data["id"]
         text = tweet["text"]
         if "display_text_range" in tweet:
             display_text_range: List[int] = tweet["display_text_range"]
@@ -778,21 +787,21 @@ class ContextBuilderAgent:
             if key in medias and medias[key].type == "photo":
                 tweet["image_url"] = medias[key].url
 
-    def _build_users(self, includes: Dict[str, Any]) -> Dict[str, User]:  # type: ignore[no-any-unimported]
-        users: Dict[str, User] = {}  # type: ignore[no-any-unimported]
+    def _build_users(self, includes: Dict[str, Any]) -> Dict[str, User]:
+        users: Dict[str, User] = {}
         if "users" in includes:
             for user in includes["users"]:
                 users[str(user.id)] = user
         return users
 
-    def _build_medias(self, includes: Dict[str, Any]) -> Dict[str, Media]:  # type: ignore[no-any-unimported]
-        medias: Dict[str, Media] = {}  # type: ignore[no-any-unimported]
+    def _build_medias(self, includes: Dict[str, Any]) -> Dict[str, Media]:
+        medias: Dict[str, Media] = {}
         if "media" in includes:
             for media in includes["media"]:
                 medias[str(media.media_key)] = media
         return medias
 
-    def _get_all_tweets(  # type: ignore[no-any-unimported]
+    def _get_all_tweets(
         self, response: TwitterResponse, users: Dict[str, User], medias: Dict[str, Media]
     ) -> List[Dict[str, Any]]:
         all_tweets: List[Dict[str, Any]] = []
@@ -841,8 +850,7 @@ class ContextBuilderAgent:
         if self.cache:
             try:
                 conversation = self.cache.get(f"{self.agent_id}:{CONVERSATION_KEY_PREFIX}{conversation_id}", "[]")
-                assert conversation is not None
-                return cast(List[Dict[str, Any]], json.loads(conversation))
+                return json.loads(conversation)
             except Exception as e:
                 logger.error(f"error _get_cached_conversation: {e}")
         return []
@@ -864,12 +872,12 @@ class ContextBuilderAgent:
             try:
                 tweet = self.cache.get(f"{self.agent_id}:{TWEET_KEY_PREFIX}{tweet_id}")
                 if tweet:
-                    return cast(Dict[str, Any], json.loads(tweet))
+                    return json.loads(tweet)
             except Exception as e:
                 logger.error(f"error _get_cached_tweet: {e}")
         return None
 
-    async def get_tweet(self, tweet_id: str) -> Optional[Dict[str, Any]]:
+    async def get_tweet(self, tweet_id):
         tweet = await self._get_cached_tweet(tweet_id)
         if tweet:
             return tweet
