@@ -30,4 +30,4 @@ llm_token_usage = Counter("llm_token_usage", "LLM token usage")
 api_requests_total = Counter("api_requests_total", "Total API requests", ["endpoint", "status"])
 api_request_duration = Histogram("api_request_duration_seconds", "API request duration", ["endpoint"])
 
-start_server = start_http_server
+start_metrics_server = start_http_server

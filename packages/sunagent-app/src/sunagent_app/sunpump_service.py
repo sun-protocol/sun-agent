@@ -22,7 +22,7 @@ logger = logging.getLogger(LOGGER_NAME)
 class SunPumpService:
     DEFAULT_ERROR = "Service is busy"
 
-    def __init__(self, host):
+    def __init__(self, host: str):
         self._host = host
         self._sunpump = os.getenv("SUNPUMP_HOST")
 
@@ -46,7 +46,7 @@ class SunPumpService:
             return data
         if data is None or "status" not in data:
             return "NONE"
-        return data["status"]
+        return str(data["status"])
 
     async def can_launch_new_token(self, username: str) -> str:
         """
@@ -113,7 +113,7 @@ class SunPumpService:
         data = await self._request("GET", uri=uri, params=params)
         if isinstance(data, str):
             return data
-        if "tokens" in data and isinstance(data["tokens"], List):
+        if data is not None and "tokens" in data and isinstance(data["tokens"], List):
             FILTER_FIELDS = [
                 "tweetUsername",
                 "name",
@@ -154,7 +154,7 @@ class SunPumpService:
         data = await self._request("GET", uri=uri, params=params)
         if isinstance(data, str):
             return data
-        if "tokens" in data and isinstance(data["tokens"], List):
+        if data is not None and "tokens" in data and isinstance(data["tokens"], List):
             FILTER_FIELDS = [
                 "name",
                 "symbol",
@@ -229,7 +229,7 @@ class SunPumpService:
         return self.DEFAULT_ERROR
 
     async def _request(
-        self, method: str, uri: str, params: Dict[str, str] = None, data: Dict[str, str] = None
+        self, method: str, uri: str, params: Optional[Dict[str, str]] = None, data: Optional[Dict[str, str]] = None
     ) -> Optional[Dict[str, Any] | str]:
         try:
             url = f"{self._host}{uri}"
@@ -240,7 +240,11 @@ class SunPumpService:
                     logger.info(f"{method} {url} response:{response}")
                     if "code" in result and result["code"] != 0:
                         return result["msg"] if "msg" in result else self.DEFAULT_ERROR
-                    return result["data"]
+                    return (
+                        cast(Dict[str, Any], result["data"])
+                        if isinstance(result["data"], Dict)
+                        else str(result["data"])
+                    )
         except aiohttp.ClientError as e:
             logger.error(f"Error {method} {url}: {e}")
             return self.DEFAULT_ERROR

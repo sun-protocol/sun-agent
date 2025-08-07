@@ -6,6 +6,7 @@ from typing import (
     List,
     Optional,
     Sequence,
+    Tuple,
 )
 
 from autogen_agentchat.agents import BaseChatAgent
@@ -85,7 +86,7 @@ Evaluate result:
         """Reset the assistant agent to its initialization state."""
         pass
 
-    def _validate(self, content: str) -> (bool, str):
+    def _validate(self, content: str) -> Tuple[bool, str]:
         tweets = extract_markdown_json_blocks(content)
         if len(tweets) != 1:
             return False, "content not found"

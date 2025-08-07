@@ -37,7 +37,7 @@ def extract_message_content(message: ChatMessage) -> str:
         text_parts = [item for item in message.content if isinstance(item, str)]
         return " ".join(text_parts)
     else:
-        content = getattr(message, 'content', "")
+        content = getattr(message, "content", "")
         return str(content) if content and not isinstance(content, str) else content or ""
 
 
@@ -88,12 +88,11 @@ class ImagePromptAgent(BaseChatAgent):
             response = await self.text_model_client.create(
                 [
                     SystemMessage(content=prompt_text),
-                    UserMessage(
-                        content=message_content, source=self.name
-                    ),
+                    UserMessage(content=message_content, source=self.name),
                 ],
             )
             model_api_success_count.inc()
+            assert isinstance(response.content, str)
             return response.content
         except Exception as e:
             model_api_failure_count.inc()
@@ -140,7 +139,7 @@ class ImageGenerateAgent(BaseChatAgent):
             # Get the last message as the image prompt
             last_message = messages[-1]
             image_prompt = extract_message_content(last_message)
-            
+
             if not image_prompt:
                 return self._create_error_response("No image prompt provided")
             # Generate image
@@ -163,6 +162,14 @@ class ImageGenerateAgent(BaseChatAgent):
                 config=types.GenerateImagesConfig(number_of_images=1),
             )
             model_api_success_count.inc()
+            if (
+                response.generated_images is None
+                or len(response.generated_images) == 0
+                or response.generated_images[0].image is None
+                or response.generated_images[0].image.image_bytes is None
+            ):
+                logger.error("Failed to generate image")
+                return None
             raw_image = response.generated_images[0].image.image_bytes
             image = PILImage.open(BytesIO(raw_image), formats=["JPEG", "PNG"])
             return image.resize((self.width, self.height))

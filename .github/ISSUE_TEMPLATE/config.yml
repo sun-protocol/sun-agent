@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions or general help 💬
+    url: https://github.com/sun-protocol/sun-agent/issues
+    about: Please ask and answer questions here.

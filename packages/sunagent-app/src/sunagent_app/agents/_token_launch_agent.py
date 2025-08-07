@@ -95,7 +95,7 @@ class TokenLaunchAgent(BaseChatAgent):
         status_result = await self._check_previous_launch_status(informations["username"])
         if status_result:
             return status_result
-        
+
         # 5. Get or generate image
         image_result = await self._get_or_generate_image(tweet, informations)
         if isinstance(image_result, Response):
@@ -119,11 +119,12 @@ class TokenLaunchAgent(BaseChatAgent):
         }
 
         for message in messages:
-            if message.source == "user":
-                tweets = extract_tweets_from_markdown_json_blocks(message.content)
-                tweet = tweets[0] if len(tweets) > 0 else None
-            elif isinstance(message, TextMessage):
-                self._get_informations_from_message(message, informations)
+            if isinstance(message, TextMessage):
+                if message.source == "user":
+                    tweets = extract_tweets_from_markdown_json_blocks(message.content)
+                    tweet = tweets[0] if len(tweets) > 0 else None
+                else:
+                    self._get_informations_from_message(message, informations)
 
         assert tweet is not None, "No valid tweet found in messages"
         informations["username"] = tweet["author"]
@@ -186,6 +187,9 @@ class TokenLaunchAgent(BaseChatAgent):
     async def _check_previous_launch_status(self, username: Optional[str]) -> Optional[Response]:
         """Check user's previous token launch status"""
         try:
+            if username is None:
+                logger.warning("username is not detected!")
+                return None
             status = await self._sunpump_service.query_launch_token_status_by_user(username)
             logger.info(f"Previous launch status: {status}")
             if status == "UPLOADED":
@@ -212,7 +216,7 @@ class TokenLaunchAgent(BaseChatAgent):
             logger.info(f"Fetching image from URL: {tweet['image_url']}")
             image = await self._fetch_image_from_url(tweet["image_url"])
             if image:
-                return image.resize(self.width, self.height)
+                return image.resize((self.width, self.height))
 
         # Generate new image
         return await self._generate_token_image(informations)
@@ -236,9 +240,9 @@ class TokenLaunchAgent(BaseChatAgent):
             )
             if result.messages:
                 last_message = result.messages[-1]
-                
+
                 if isinstance(last_message, MultiModalMessage):
-                    content = getattr(last_message, 'content', None)
+                    content = getattr(last_message, "content", None)
                     if content and isinstance(content, list):
                         for content_item in content:
                             if isinstance(content_item, Image):
@@ -274,8 +278,8 @@ class TokenLaunchAgent(BaseChatAgent):
                 str(informations["symbol"]),
                 str(informations["description"]),
                 resized_image.to_base64(),
-                informations.get("tweet_id", ""),
-                str(informations["username"]),
+                str(informations.get("tweet_id", "")),
+                str(informations.get("username", "")),
             )
             logger.info(f"Token Launch Result: {response}")
             return Response(chat_message=TextMessage(content=f"Token Launch Result:\n{response}", source=self.name))
@@ -285,4 +289,3 @@ class TokenLaunchAgent(BaseChatAgent):
 
     async def on_reset(self, cancellation_token: CancellationToken) -> None:
         await self._image_generation_team.reset()
-

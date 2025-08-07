@@ -1,3 +1,3 @@
-from sunagent_app.metrics import start_http_server
+from sunagent_app.metrics import start_metrics_server
 
-__all__ = ["start_http_server"]
+__all__ = ["start_metrics_server"]
