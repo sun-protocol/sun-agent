@@ -1,4 +1,5 @@
 from typing import (
+    IO,
     TYPE_CHECKING,
     Any,
     Callable,
@@ -8,7 +9,6 @@ from typing import (
     Mapping,
     MutableMapping,
     Optional,
-    IO,
 )
 
 from requests import (
