@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sunagent-app"
-version = "0.0.26b9"
+version = "0.0.26b10"
 license = {file = "LICENSE-CODE"}
 description = "sunagent app"
 readme = "README.md"
