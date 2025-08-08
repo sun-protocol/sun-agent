@@ -18,7 +18,7 @@ dependencies = [
   "autogen-core",
   "openpyxl",
   "autogen-ext",
-  "sunagent-ext==0.0.6b10",
+  "sunagent-ext>=0.0.6b10",
   "autogen-agentchat",
   "prometheus_client",
   "autogen",
