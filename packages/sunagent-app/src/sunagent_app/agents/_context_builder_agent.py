@@ -165,7 +165,7 @@ class ContextBuilderAgent:
     3. 处理API限制和错误重试
     """
 
-    def __init__(  # type: ignore[no-any-unimported]
+    def __init__(  # type: ignore[no-any-unimported,no-untyped-def]
         self,
         agent_id: str,
         twitter_client: TwitterClient,
