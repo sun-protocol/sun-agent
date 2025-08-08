@@ -38,7 +38,7 @@ class ImageGenerateAgent(BaseChatAgent):
     An information extraction agent must be called before this agent.
     """
 
-    def __init__(  # type: ignore
+    def __init__(
         self,
         name: str,
         text_model_client: AzureOpenAIChatCompletionClient,

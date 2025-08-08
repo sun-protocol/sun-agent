@@ -13,7 +13,7 @@ from typing import (
     cast,
 )
 
-import requests  # type: ignore
+import requests
 from requests_oauthlib import OAuth1
 from sunagent_ext.cache_store import CacheStore
 from sunagent_ext.utils import (
@@ -165,7 +165,7 @@ class ContextBuilderAgent:
     3. 处理API限制和错误重试
     """
 
-    def __init__(  # type: ignore
+    def __init__(  # type: ignore[no-any-unimported]
         self,
         agent_id: str,
         twitter_client: TwitterClient,
