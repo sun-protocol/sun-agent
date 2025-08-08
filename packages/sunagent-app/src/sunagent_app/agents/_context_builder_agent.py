@@ -173,10 +173,10 @@ class ContextBuilderAgent:
         cache: Optional[CacheStore[str]] = None,
         max_depth: int = 5,
         timeout: int = 30,
-        block_user_ids: Optional[List[int]]=None,
-        white_user_ids: Optional[List[int]]=None,
-        reply_freq_limit: int=5,
-        max_results: int=100,
+        block_user_ids: Optional[List[int]] = None,
+        white_user_ids: Optional[List[int]] = None,
+        reply_freq_limit: int = 5,
+        max_results: int = 100,
     ) -> None:
         self.agent_id = agent_id
         self.twitter = twitter_client
