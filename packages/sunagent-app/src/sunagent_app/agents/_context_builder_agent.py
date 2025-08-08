@@ -165,7 +165,7 @@ class ContextBuilderAgent:
     3. 处理API限制和错误重试
     """
 
-    def __init__(  # type: ignore[no-any-unimported,no-untyped-def]
+    def __init__(  # type: ignore[no-any-unimported]
         self,
         agent_id: str,
         twitter_client: TwitterClient,
@@ -173,10 +173,10 @@ class ContextBuilderAgent:
         cache: Optional[CacheStore[str]] = None,
         max_depth: int = 5,
         timeout: int = 30,
-        block_user_ids=None,
-        white_user_ids=None,
-        reply_freq_limit=5,
-        max_results=100,
+        block_user_ids: Optional[List[int]]=None,
+        white_user_ids: Optional[List[int]]=None,
+        reply_freq_limit: int=5,
+        max_results: int=100,
     ) -> None:
         self.agent_id = agent_id
         self.twitter = twitter_client
