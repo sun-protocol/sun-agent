@@ -235,7 +235,7 @@ class SunPumpService:
                     # response.raise_for_status()
                     result = await response.json()
                     logger.info(f"{method} {url} response:{response}")
-                    if "data" not in result or result["data"] != 0:
+                    if "code" in result and result["code"] != 0:
                         return result["msg"] if "msg" in result else self.DEFAULT_ERROR
                     if "data" not in result or result["data"] is None:
                         return None
