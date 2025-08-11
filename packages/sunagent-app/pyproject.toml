@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sunagent-app"
-version = "0.0.26b11"
+version = "0.0.27b1"
 license = {file = "LICENSE-CODE"}
 description = "sunagent app"
 readme = "README.md"
@@ -29,6 +29,7 @@ dependencies = [
   "aiohttp",
   "async_lru",
   "apscheduler",
+  "beem",
   "oauthlib",
   "pytz",
   "google-genai",
