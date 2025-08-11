@@ -2,7 +2,7 @@ import logging
 import time
 import traceback
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from autogen_core import CacheStore
 from beem.account import Account
@@ -26,10 +26,10 @@ logger = logging.getLogger(LOGGER_NAME)
 class SteemContextBuilder(object):
     def __init__(
         self,
-        node="https://api.steemit.com",
-        post_key="",
-        account_name="",
-        cache: Optional[CacheStore] = None,
+        node: str = "https://api.steemit.com",
+        post_key: str = "",
+        account_name: str = "",
+        cache: Optional[CacheStore[str]] = None,
     ):
         self.steem = Steem(node=node, keys=[post_key])
         self.post_key = post_key
@@ -37,7 +37,7 @@ class SteemContextBuilder(object):
         self.account = Account(self.account_name, blockchain_instance=self.steem)
         self.cache = cache
 
-    def _new_post(self, title: str, body: str, tags: list, self_vote: bool = False):
+    def _new_post(self, title: str, body: str, tags: List[str], self_vote: bool = False) -> str:
         """
         create new post on steemit
         :param title:
@@ -61,7 +61,7 @@ class SteemContextBuilder(object):
             post_steem_failure_count.inc()
             return f"New post {title} failed e : {str(e)}"
 
-    def _reply_comment(self, authorperm: str, body: str):
+    def _reply_comment(self, authorperm: str, body: str) -> str:
         """
         reply comment in steemit
         :param authorperm:
@@ -83,15 +83,15 @@ class SteemContextBuilder(object):
             logger.error(traceback.format_exc())
             return f"Reply comment {authorperm} failed e : {str(e)}"
 
-    def _get_followings(self):
+    def _get_followings(self) -> Any:
         return self.account.get_following()
 
-    def _get_discussions_before(self, account_name, date, limit) -> list[Comment]:
+    def _get_discussions_before(self, account_name: str, date: str, limit: int) -> Any:
         return Discussions_by_author_before_date(
             author=account_name, date=date, limit=limit, blockchain_instance=self.steem
         )
 
-    def _get_followings_new_posts(self, days=1):
+    def _get_followings_new_posts(self, days: int = 1) -> list[Any]:
         """
         获取最近账户关注kol的最新内容
         :param days:
@@ -117,14 +117,14 @@ class SteemContextBuilder(object):
                 read_steem_failure_count.inc()
         return res
 
-    def get_new_reply(self, days=7):
+    def get_new_reply(self, days: int = 7) -> List[Dict[str, Any]]:
         """
         get new replys
         :param days:
         :return:
         """
         mentions = []
-        dd: list[Comment] = []
+        dd = []
         # 时间节点在七天内
         for d in self._get_discussions_before(account_name=self.account_name, date="1970-01-01T00:00:00", limit=100):
             if d.time_elapsed() < timedelta(days=days):
@@ -136,10 +136,10 @@ class SteemContextBuilder(object):
                     mentions.append(h)
         return mentions
 
-    def get_his(self, comment: Comment):
+    def get_his(self, comment: Comment):  # type: ignore
         res = []
 
-        def get_reply(c: Comment, history):
+        def get_reply(c: Comment, history):  # type: ignore
             try:
                 cd = c.get_replies()
                 if len(cd) > 0:
