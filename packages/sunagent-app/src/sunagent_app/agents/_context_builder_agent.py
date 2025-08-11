@@ -627,6 +627,7 @@ class ContextBuilderAgent:
             "author",
             "image_url",
             "public_metrics",
+            "author_id",
         ]
         simplified_tweet: Dict[str, Any] = {}
         for key, value in tweet.items():
