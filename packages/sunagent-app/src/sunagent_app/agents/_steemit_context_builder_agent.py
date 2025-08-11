@@ -136,9 +136,9 @@ class SteemContextBuilder(object):
                     mentions.append(h)
         return mentions
 
-    def get_his(self, comment: Comment) -> list[Dict[str, Any]]: #type： ignore
+    def get_his(self, comment: Comment) -> list[Dict[str, Any]]:# type: ignore[no-any-unimported]
         res = []
-        def get_reply(c: Comment, history:list[Dict[str, Any]]) -> None:
+        def get_reply(c: Comment, history:list[Dict[str, Any]]) -> None:# type: ignore[no-any-unimported]
             try:
                 cd = c.get_replies()
                 if len(cd) > 0:
