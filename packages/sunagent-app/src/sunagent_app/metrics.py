@@ -20,6 +20,12 @@ get_twitter_quota_limit = Gauge("get_twitter_quota_limit", "Twitter quota limit"
 # Twitter 账号封禁监控
 twitter_account_banned = Gauge("twitter_account_banned", "Twitter account banned status (1 = banned, 0 = active)")
 
+post_steem_success_count = Counter("post_steem_success_count", "Number of successful post steem")
+post_steem_failure_count = Counter("post_steem_failure_count", "Number of failed post steem")
+
+read_steem_success_count = Counter("read_steem_success_count", "Number of successful read steem")
+read_steem_failure_count = Counter("read_steem_failure_count", "Number of failed read steem")
+
 twitter_api_failure_count = Counter("twitter_api_failure_count", "Number of Twitter API failures")
 # 链路耗时监控
 link_duration = Histogram("link_duration_seconds", "Link duration")
