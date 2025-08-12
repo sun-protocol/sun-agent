@@ -1,27 +1,27 @@
-import os
-import logging
 import asyncio
+import logging
+import os
 import tempfile
 from typing import Sequence
 
+from autogen_agentchat.agents import BaseChatAgent
+from autogen_agentchat.base import Response
+from autogen_agentchat.messages import TextMessage
 from knowledge_storm import (
-    STORMWikiRunnerArguments,
-    STORMWikiRunner,
     STORMWikiLMConfigs,
+    STORMWikiRunner,
+    STORMWikiRunnerArguments,
 )
 from knowledge_storm.lm import AzureOpenAIModel
 from knowledge_storm.rm import (
     TavilySearchRM,
 )
-
-# 添加autogen imports
-from autogen_agentchat.agents import BaseChatAgent
-from autogen_agentchat.messages import TextMessage
-from autogen_agentchat.base import Response
-from sunagent_app._constants import LOGGER_NAME
 from sunagent_ext.secret_management.config import Config
 
+from sunagent_app._constants import LOGGER_NAME
+
 logger = logging.getLogger(LOGGER_NAME)
+
 
 class StormConfig:
     """从环境变量中获取配置的配置类"""
@@ -71,31 +71,31 @@ class StormConfig:
 class StormAgent(BaseChatAgent):
     """
     STORM Agent for autogen - 生成维基百科风格的深度研究报告
-    
+
     该Agent可以基于给定主题进行全面的研究，生成结构化的文章内容。
     支持多个阶段：研究、大纲生成、文章写作和内容润色。
     """
-    
+
     def __init__(self, name: str, description: str = None, config: StormConfig = None):
         if description is None:
             description = """
             STORM Agent - 专业的研究和写作助手
-            
+
             功能：
             1. 基于主题进行深度研究
             2. 生成结构化的文章大纲
             3. 写作详细的Wiki风格文章
             4. 内容润色和优化
-            
+
             使用方式：
             发送包含主题的消息，Agent会自动进行研究并生成完整的报告。
             可以通过环境变量配置各个阶段的开关。
             """
-        
+
         super().__init__(name=name, description=description)
         self.config = config or StormConfig()
         self._setup_storm_runner()
-    
+
     def _setup_storm_runner(self):
         """设置STORM运行器"""
         # 设置语言模型配置
@@ -109,21 +109,11 @@ class StormAgent(BaseChatAgent):
         }
 
         # 创建各种语言模型实例
-        conv_simulator_lm = AzureOpenAIModel(
-            model=self.config.openai_model_name, max_tokens=500, **openai_kwargs
-        )
-        question_asker_lm = AzureOpenAIModel(
-            model=self.config.openai_model_name, max_tokens=500, **openai_kwargs
-        )
-        outline_gen_lm = AzureOpenAIModel(
-            model=self.config.openai_model_name, max_tokens=400, **openai_kwargs
-        )
-        article_gen_lm = AzureOpenAIModel(
-            model=self.config.openai_model_name, max_tokens=700, **openai_kwargs
-        )
-        article_polish_lm = AzureOpenAIModel(
-            model=self.config.openai_model_name, max_tokens=4000, **openai_kwargs
-        )
+        conv_simulator_lm = AzureOpenAIModel(model=self.config.openai_model_name, max_tokens=500, **openai_kwargs)
+        question_asker_lm = AzureOpenAIModel(model=self.config.openai_model_name, max_tokens=500, **openai_kwargs)
+        outline_gen_lm = AzureOpenAIModel(model=self.config.openai_model_name, max_tokens=400, **openai_kwargs)
+        article_gen_lm = AzureOpenAIModel(model=self.config.openai_model_name, max_tokens=700, **openai_kwargs)
+        article_polish_lm = AzureOpenAIModel(model=self.config.openai_model_name, max_tokens=4000, **openai_kwargs)
 
         # 设置模型配置
         self.lm_configs.set_conv_simulator_lm(conv_simulator_lm)
@@ -149,7 +139,7 @@ class StormAgent(BaseChatAgent):
             # 获取最后一条消息作为主题
             if not messages:
                 return self._create_error_response("Please provide a topic.")
-            
+
             last_message = messages[-1]
             topic = last_message.content.strip()
 
@@ -169,12 +159,7 @@ class StormAgent(BaseChatAgent):
                 # 创建STORM运行器
                 runner = STORMWikiRunner(engine_args, self.lm_configs, self.rm)
                 # 运行STORM
-                await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    self._run_storm,
-                    runner,
-                    topic
-                )
+                await asyncio.get_event_loop().run_in_executor(None, self._run_storm, runner, topic)
                 # 获取结果
                 result = StormAgent._get_storm_result(output_dir, topic)
                 return Response(
@@ -183,7 +168,7 @@ class StormAgent(BaseChatAgent):
                         source=self.name,
                     )
                 )
-        
+
         except Exception as e:
             error_message = f"An error occurred during the STORM process: {str(e)}"
             return self._create_error_response(error_message)
@@ -195,6 +180,7 @@ class StormAgent(BaseChatAgent):
                 source=self.name,
             )
         )
+
     def _run_storm(self, runner: STORMWikiRunner, topic: str):
         """运行STORM的同步方法"""
         runner.run(
@@ -202,7 +188,6 @@ class StormAgent(BaseChatAgent):
         )
         runner.post_run()
         runner.summary()
-
 
     @staticmethod
     def truncate_filename(filename, max_length=125):
@@ -213,12 +198,10 @@ class StormAgent(BaseChatAgent):
     @staticmethod
     def _get_storm_result(output_dir: str, topic: str) -> str:
         """只读取 storm_gen_article_polished.txt 文件并返回内容"""
-        article_dir_name = StormAgent.truncate_filename(
-            topic.replace(" ", "_").replace("/", "_")
-        )
+        article_dir_name = StormAgent.truncate_filename(topic.replace(" ", "_").replace("/", "_"))
         polished_path = os.path.join(output_dir, article_dir_name, "storm_gen_article_polished.txt")
         if os.path.exists(polished_path):
-            with open(polished_path, 'r', encoding='utf-8') as f:
+            with open(polished_path, "r", encoding="utf-8") as f:
                 return f.read()
         else:
             raise RuntimeError("No polished article available")
