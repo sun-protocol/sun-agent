@@ -33,6 +33,9 @@ dependencies = [
   "oauthlib",
   "pytz",
   "google-genai",
+  "knowledge_storm==1.0.1",
+  "torch>=2.0.0,<2.3.0",
+  "tavily-python",
 ]
 
 [dependency-groups]
