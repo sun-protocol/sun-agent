@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import traceback
 import os
 import tempfile
 from typing import Any, Optional, Sequence, Union
@@ -8,7 +9,7 @@ from autogen_agentchat.agents import BaseChatAgent
 from autogen_agentchat.base import Response
 from autogen_agentchat.messages import ChatMessage, TextMessage
 from autogen_core import CancellationToken
-from knowledge_storm import (  # type: ignore
+from knowledge_storm import (
     STORMWikiLMConfigs,
     STORMWikiRunner,
     STORMWikiRunnerArguments,
@@ -75,21 +76,12 @@ class StormAgent(BaseChatAgent):
     Stages: research, outline generation, article writing, and polishing.
     """
 
-    def __init__(self, name: str, description: Optional[str] = None, config: Optional[StormConfig] = None):
-        if description is None:
-            description = """
-            STORM Agent - research and writing assistant
-
-            Capabilities:
-            1) Deep research on a given topic
-            2) Structured outline generation
-            3) Wiki-style article writing
-            4) Polishing and refinement
-
-            Usage:
-            Send a message with a topic; the agent will research and produce a full report.
-            Behavior can be configured via environment variables.
-            """
+    def __init__(
+        self,
+        name: str,
+        description: str = "STORM Agent: research and wiki-style report generation.",
+        config: Optional[StormConfig] = None,
+    ):
 
         super().__init__(name=name, description=description)
         self.config = config or StormConfig()
@@ -135,10 +127,6 @@ class StormAgent(BaseChatAgent):
     async def on_messages(self, messages: Sequence[ChatMessage], cancellation_token: CancellationToken) -> Response:
         """Handle incoming messages and run STORM."""
         try:
-            # Use the last message as the topic
-            if not messages:
-                return self._create_error_response("Please provide a topic.")
-
             last_message = messages[-1]
             # Extract content from different message types
             if isinstance(last_message, TextMessage):
@@ -175,12 +163,14 @@ class StormAgent(BaseChatAgent):
 
         except Exception as e:
             error_message = f"An error occurred during the STORM process: {str(e)}"
-            return self._create_error_response(error_message)
+            logger.error(error_message)
+            logger.error(traceback.format_exc())
+            return self._create_error_response()
 
-    def _create_error_response(self, error_message: str) -> Response:
+    def _create_error_response(self) -> Response:
         return Response(
             chat_message=TextMessage(
-                content=f"system internal error: {error_message}, EARLY_TERMINATE",
+                content=f"system internal error, EARLY_TERMINATE",
                 source=self.name,
             )
         )
