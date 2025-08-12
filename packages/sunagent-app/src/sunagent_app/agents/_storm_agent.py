@@ -82,7 +82,6 @@ class StormAgent(BaseChatAgent):
         description: str = "STORM Agent: research and wiki-style report generation.",
         config: Optional[StormConfig] = None,
     ):
-
         super().__init__(name=name, description=description)
         self.config = config or StormConfig()
         self._setup_storm_runner()
