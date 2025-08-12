@@ -2,12 +2,13 @@ import asyncio
 import logging
 import os
 import tempfile
-from typing import Sequence
+from typing import Any, Optional, Sequence, Union
 
 from autogen_agentchat.agents import BaseChatAgent
 from autogen_agentchat.base import Response
-from autogen_agentchat.messages import TextMessage
-from knowledge_storm import (
+from autogen_agentchat.messages import ChatMessage, TextMessage
+from autogen_core import CancellationToken
+from knowledge_storm import (  # type: ignore
     STORMWikiLMConfigs,
     STORMWikiRunner,
     STORMWikiRunnerArguments,
@@ -26,25 +27,25 @@ logger = logging.getLogger(LOGGER_NAME)
 class StormConfig:
     """Config loader for environment variables."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         # OpenAI parameters
-        self.openai_api_key = ""
-        self.openai_model_name = ""
-        self.azure_api_base = ""
-        self.azure_api_version = ""
+        self.openai_api_key: str = ""
+        self.openai_model_name: str = ""
+        self.azure_api_base: str = ""
+        self.azure_api_version: str = ""
 
         # String parameters
-        self.output_dir = ""
-        self.tavily_api_key = ""
+        self.output_dir: str = ""
+        self.tavily_api_key: str = ""
 
         # Integer parameters
-        self.max_thread_num = ""
-        self.max_conv_turn = ""
-        self.max_perspective = ""
-        self.search_top_k = ""
-        self.retrieve_top_k = ""
+        self.max_thread_num: int = 2
+        self.max_conv_turn: int = 2
+        self.max_perspective: int = 2
+        self.search_top_k: int = 2
+        self.retrieve_top_k: int = 2
 
-    async def initialize(self, config: Config):
+    async def initialize(self, config: Config) -> None:
         self.openai_api_key = await config.get_env("openai/OPENAI_API_KEY")
         self.openai_model_name = await config.get_env("openai/OPENAI_DEPLOYMENT")
         self.azure_api_base = await config.get_env("openai/OPENAI_ENDPOINT")
@@ -61,7 +62,7 @@ class StormConfig:
         self.search_top_k = int(await config.get_env("SEARCH_TOP_K", "2"))
         self.retrieve_top_k = int(await config.get_env("RETRIEVE_TOP_K", "2"))
 
-    def _str_to_bool(self, value):
+    def _str_to_bool(self, value: Union[str, bool]) -> bool:
         if isinstance(value, bool):
             return value
         return value.lower() in ("true", "1", "yes", "on")
@@ -74,7 +75,7 @@ class StormAgent(BaseChatAgent):
     Stages: research, outline generation, article writing, and polishing.
     """
 
-    def __init__(self, name: str, description: str = None, config: StormConfig = None):
+    def __init__(self, name: str, description: Optional[str] = None, config: Optional[StormConfig] = None):
         if description is None:
             description = """
             STORM Agent - research and writing assistant
@@ -94,7 +95,7 @@ class StormAgent(BaseChatAgent):
         self.config = config or StormConfig()
         self._setup_storm_runner()
 
-    def _setup_storm_runner(self):
+    def _setup_storm_runner(self) -> None:
         """Initialize the STORM runner."""
         # Language model configuration
         self.lm_configs = STORMWikiLMConfigs()
@@ -127,11 +128,11 @@ class StormAgent(BaseChatAgent):
             include_raw_content=True,
         )
 
-    async def on_reset(self, cancellation_token=None):
+    async def on_reset(self, cancellation_token: Optional[CancellationToken] = None) -> None:
         """Reset agent state."""
         pass
 
-    async def on_messages(self, messages: Sequence[TextMessage], cancellation_token=None, **kwargs) -> Response:
+    async def on_messages(self, messages: Sequence[ChatMessage], cancellation_token: CancellationToken) -> Response:
         """Handle incoming messages and run STORM."""
         try:
             # Use the last message as the topic
@@ -139,7 +140,12 @@ class StormAgent(BaseChatAgent):
                 return self._create_error_response("Please provide a topic.")
 
             last_message = messages[-1]
-            topic = last_message.content.strip()
+            # Extract content from different message types
+            if isinstance(last_message, TextMessage):
+                topic = last_message.content.strip()
+            else:
+                # Handle other message types or fall back to string representation
+                topic = str(last_message).strip()
 
             # Create a temporary output directory
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -179,7 +185,7 @@ class StormAgent(BaseChatAgent):
             )
         )
 
-    def _run_storm(self, runner: STORMWikiRunner, topic: str):
+    def _run_storm(self, runner: Any, topic: str) -> None:
         """Synchronous wrapper to run STORM."""
         runner.run(
             topic=topic,
@@ -188,7 +194,7 @@ class StormAgent(BaseChatAgent):
         runner.summary()
 
     @staticmethod
-    def truncate_filename(filename, max_length=125):
+    def truncate_filename(filename: str, max_length: int = 125) -> str:
         if len(filename) > max_length:
             return filename[:max_length]
         return filename
@@ -205,6 +211,6 @@ class StormAgent(BaseChatAgent):
             raise RuntimeError("No polished article available")
 
     @property
-    def produced_message_types(self):
+    def produced_message_types(self) -> Sequence[type[ChatMessage]]:
         """Message types produced by this agent."""
-        return ["TextMessage"]
+        return [TextMessage]
