@@ -766,7 +766,11 @@ class ContextBuilderAgent:
             if user and "affiliation" in user and "description" in user["affiliation"]
             else False
         )
-        tweet["mentions_me"] = "in_reply_to_user_id" in tweet and tweet["in_reply_to_user_id"] == self.me.data["id"]  # type: ignore[union-attr]
+        tweet["mentions_me"] = (
+            "entities" in tweet
+            and "mentions" in tweet["entities"]
+            and self.me.data["id"] in list(str(i["id"]) for i in tweet["entities"]["mentions"])  # type: ignore[union-attr]
+        )
         text = tweet["text"]
         if "display_text_range" in tweet:
             display_text_range: List[int] = tweet["display_text_range"]
