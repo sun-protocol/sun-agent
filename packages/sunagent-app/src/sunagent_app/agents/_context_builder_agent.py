@@ -766,7 +766,13 @@ class ContextBuilderAgent:
             if user and "affiliation" in user and "description" in user["affiliation"]
             else False
         )
-        tweet["mentions_me"] = "in_reply_to_user_id" in tweet and tweet["in_reply_to_user_id"] == self.me.data["id"]  # type: ignore[union-attr]
+        mentions_ids = []
+        try:
+            mentions_ids = (i["id"] for i in tweet["entities"]["mentions"])
+        except Exception as e:
+            logger.error(f"An unexpected error occurred: {e}")
+            logger.error(traceback.format_exc())
+        tweet["mentions_me"] = self.me.data["id"] in mentions_ids # type: ignore[union-attr]
         text = tweet["text"]
         if "display_text_range" in tweet:
             display_text_range: List[int] = tweet["display_text_range"]
