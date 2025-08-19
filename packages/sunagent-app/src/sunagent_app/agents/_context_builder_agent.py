@@ -401,13 +401,16 @@ class ContextBuilderAgent:
             await asyncio.sleep(2**attempt)  # 指数退避
         return "[]"
 
-    async def get_mentions_with_context(self) -> str:
-        def filter_tweet(tweet: Dict[str, Any]) -> bool:
+    async def get_mentions_with_context(
+        self, filter_func: Optional[Callable[[Dict[str, Any], Optional[User]], bool]] = None
+    ) -> str:
+        def filter_tweet(tweet: Dict[str, Any], user: Optional[User] = None) -> bool:
             return bool(tweet["mentions_me"])
 
         """
         Get the new tweets with full conversation context that mentions me since last time.
-        Params: no parameters required
+        Params:
+        - filter_func: Callable to filter each tweet. Defaults to internal filter_tweet (filters by mentions_me).
         Return: json string, which is a list of tweets
         """
         if not self.run_enabled:
@@ -453,7 +456,9 @@ class ContextBuilderAgent:
                     )
                     if not newest_id and "newest_id" in response.meta:
                         newest_id = response.meta["newest_id"]
-                    tweet_list, next_token = await self.on_twitter_response(response, filter_func=filter_tweet)
+                    tweet_list, next_token = await self.on_twitter_response(
+                        response, filter_func=(filter_func or filter_tweet)
+                    )
                     if len(tweet_list) > 0:
                         tweets.extend(tweet_list)
                         read_tweet_success_count.inc(len(tweet_list))
@@ -499,7 +504,7 @@ class ContextBuilderAgent:
     async def on_twitter_response(  # type: ignore[no-any-unimported]
         self,
         response: Response | StreamResponse,
-        filter_func: Callable[[Dict[str, Any]], bool] = (lambda x: True),
+        filter_func: Callable[[Dict[str, Any], Optional[User]], bool] = (lambda x, y: True),
     ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
         tweets: List[Dict[str, Any]] = []
         next_token = response.meta["next_token"] if "next_token" in response.meta else None
@@ -519,11 +524,14 @@ class ContextBuilderAgent:
             conversation_id = tweet["conversation_id"]
             host_tweet = await self.get_tweet(conversation_id)
             freq = await self._get_freq(tweet)
+            # 获取用户信息
+            author_id = tweet["author_id"]
+            user = users[author_id] if author_id in users else None
             if (
                 tweet["author_id"] == self.me.data["id"]  # type: ignore[union-attr]
                 or self.block_user_ids.count(int(tweet["author_id"])) != 0
                 or is_processed
-                or not filter_func(tweet)
+                or not filter_func(tweet, user)
                 or (
                     freq >= self.reply_freq_limit
                     and host_tweet
