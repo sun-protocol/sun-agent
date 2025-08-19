@@ -559,7 +559,7 @@ class ContextBuilderAgent:
         """
         递归获取父级推文的核心逻辑
         """
-        if depth > self.max_depth:
+        if depth >= self.max_depth:
             logger.warning(f"max_depth {self.max_depth} exceeded")
             conversation.append(tweet)
             return True
