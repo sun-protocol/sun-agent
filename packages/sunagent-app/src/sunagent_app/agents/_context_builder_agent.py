@@ -395,16 +395,16 @@ class ContextBuilderAgent:
             except Exception as e:
                 read_tweet_failure_count.inc()
                 logger.error(traceback.format_exc())
-                logger.error(f"error get_home_timeline_with_context(attempt {attempt+1}): {str(e)}")
+                logger.error(f"error get_home_timeline_with_context(attempt {attempt + 1}): {str(e)}")
                 if not isinstance(e, TwitterServerError):
                     break
             await asyncio.sleep(2**attempt)  # 指数退避
         return "[]"
 
-    async def get_mentions_with_context( # type: ignore[no-any-unimported]
+    async def get_mentions_with_context(  # type: ignore[no-any-unimported]
         self, filter_func: Optional[Callable[[Dict[str, Any], User], bool]] = None
     ) -> str:
-        def filter_tweet(tweet: Dict[str, Any], user: User) -> bool: # type: ignore[no-any-unimported]
+        def filter_tweet(tweet: Dict[str, Any], user: User) -> bool:  # type: ignore[no-any-unimported]
             return bool(tweet["mentions_me"])
 
         """
@@ -495,7 +495,7 @@ class ContextBuilderAgent:
             except Exception as e:
                 read_tweet_failure_count.inc()
                 logger.error(traceback.format_exc())
-                logger.error(f"error get_mentions_with_context(attempt {attempt+1}): {str(e)}")
+                logger.error(f"error get_mentions_with_context(attempt {attempt + 1}): {str(e)}")
                 if not isinstance(e, TwitterServerError):
                     break
             await asyncio.sleep(2**attempt)  # 指数退避
@@ -515,7 +515,7 @@ class ContextBuilderAgent:
         medias: Dict[str, Media] = self._build_medias(response.includes)  # type: ignore[no-any-unimported]
         all_tweets = self._get_all_tweets(response, users, medias)
         if len(all_tweets) > 0:
-            logger.info(f"first tweet id {all_tweets[0]["id"]}")
+            logger.info(f"first tweet id {all_tweets[0]['id']}")
         await self._cache_tweets(all_tweets)
         has_processed = False
         for tweet in all_tweets:
@@ -620,7 +620,7 @@ class ContextBuilderAgent:
                 if isinstance(e, NotFound):
                     logger.warning(f"tweet not exists: {tweet_id}")
                     return None
-                logger.error(f"error get_tweet(attempt {attempt+1}): {str(e)}")
+                logger.error(f"error get_tweet(attempt {attempt + 1}): {str(e)}")
                 if not isinstance(e, TwitterServerError):
                     return None
                 await asyncio.sleep(2**attempt)  # 指数退避
