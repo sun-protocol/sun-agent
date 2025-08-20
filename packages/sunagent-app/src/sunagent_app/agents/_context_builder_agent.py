@@ -401,10 +401,10 @@ class ContextBuilderAgent:
             await asyncio.sleep(2**attempt)  # 指数退避
         return "[]"
 
-    async def get_mentions_with_context(
-        self, filter_func: Optional[Callable[[Dict[str, Any], Optional[User]], bool]] = None
+    async def get_mentions_with_context( # type: ignore[no-any-unimported]
+        self, filter_func: Optional[Callable[[Dict[str, Any], User], bool]] = None
     ) -> str:
-        def filter_tweet(tweet: Dict[str, Any], user: Optional[User] = None) -> bool:
+        def filter_tweet(tweet: Dict[str, Any], user: User) -> bool: # type: ignore[no-any-unimported]
             return bool(tweet["mentions_me"])
 
         """
