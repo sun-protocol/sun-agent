@@ -39,9 +39,6 @@ dependencies = [
 
 # 可选依赖
 [project.optional-dependencies]
-browser = [
-    "playwright",          # 浏览器自动化
-]
 storm = [
     "knowledge_storm==1.0.1",
     "torch>=2.0.0,<2.3.0",
@@ -49,7 +46,7 @@ storm = [
 ]
 # 一键安装所有可选依赖
 all = [
-    "sunagent-app[browser,storm]",
+    "sunagent-app[storm]",
 ]
 
 [dependency-groups]
