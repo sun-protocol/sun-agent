@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sunagent-app"
-version = "0.0.27b7"
-license = {file = "LICENSE-CODE"}
+version = "0.0.27b8"
+license = { file = "LICENSE-CODE" }
 description = "sunagent app"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -14,34 +14,48 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+
+# 仅保留最常用 / 启动必需的依赖
 dependencies = [
-  "autogen-core",
-  "openpyxl",
-  "autogen-ext",
-  "sunagent-ext>=0.0.6b10",
-  "autogen-agentchat",
-  "prometheus_client",
-  "autogen",
-  "flask[async]",
-  "flask_cors",
-  "quart",
-  "tweepy",
-  "aiohttp",
-  "async_lru",
-  "apscheduler",
-  "beem",
-  "oauthlib",
-  "pytz",
-  "google-genai",
-  "knowledge_storm==1.0.1",
-  "torch>=2.0.0,<2.3.0",
-  "tavily-python",
+    "autogen-core",
+    "autogen-ext",
+    "autogen-agentchat",
+    "autogen",
+    "flask[async]",
+    "flask_cors",
+    "openpyxl",            # Excel 读写
+    "prometheus_client",   # 监控
+    "beem",                # Hive 链交互
+    "oauthlib",            # OAuth
+    "tweepy",
+    "quart",
+    "aiohttp",
+    "async_lru",
+    "google-genai",
+    "apscheduler",
+    "pytz",
+    "sunagent-ext>=0.0.6b10",
+]
+
+# 可选依赖
+[project.optional-dependencies]
+browser = [
+    "playwright",          # 浏览器自动化
+]
+storm = [
+    "knowledge_storm==1.0.1",
+    "torch>=2.0.0,<2.3.0",
+    "tavily-python",
+]
+# 一键安装所有可选依赖
+all = [
+    "sunagent-app[browser,storm]",
 ]
 
 [dependency-groups]
 dev = [
-  "types-pytz",
-  "types-requests",
+    "types-pytz",
+    "types-requests",
 ]
 
 [tool.hatch.version]
@@ -59,7 +73,7 @@ extends = "../../pyproject.toml"
 include = ["tests"]
 
 [tool.mypy.overrides]
-"tweepy" = { ignore_errors = true }
+tweepy = { ignore_errors = true }
 
 [tool.pytest.ini_options]
 minversion = "6.0"
