@@ -146,6 +146,8 @@ USER_FIELDS = [
 ]
 PLACE_FIELDS = ["contained_within", "country", "country_code", "full_name", "geo", "id", "name", "place_type"]
 
+def filter_tweet(tweet: Dict[str, Any], user: Optional[User]) -> bool:  # type: ignore[no-any-unimported]
+    return bool(tweet["mentions_me"])
 
 class MentionStream(AsyncStreamingClient):  # type: ignore[misc,no-any-unimported]
     def __init__(self, on_response: Callable[[StreamResponse, str], None], **kwargs: Any) -> None:  # type: ignore[no-any-unimported]
@@ -402,15 +404,13 @@ class ContextBuilderAgent:
         return "[]"
 
     async def get_mentions_with_context(  # type: ignore[no-any-unimported]
-        self, filter_func: Optional[Callable[[Dict[str, Any], User], bool]] = None
+        self, filter_func: Callable[[Dict[str, Any], Optional[User]], bool] = filter_tweet
     ) -> str:
-        def filter_tweet(tweet: Dict[str, Any], user: User) -> bool:  # type: ignore[no-any-unimported]
-            return bool(tweet["mentions_me"])
 
         """
         Get the new tweets with full conversation context that mentions me since last time.
         Params:
-        - filter_func: Callable to filter each tweet. Defaults to internal filter_tweet (filters by mentions_me).
+        - filter_func: Callable to filter each tweet. Defaults to filter_tweet.
         Return: json string, which is a list of tweets
         """
         if not self.run_enabled:
@@ -456,9 +456,7 @@ class ContextBuilderAgent:
                     )
                     if not newest_id and "newest_id" in response.meta:
                         newest_id = response.meta["newest_id"]
-                    tweet_list, next_token = await self.on_twitter_response(
-                        response, filter_func=(filter_func or filter_tweet)
-                    )
+                    tweet_list, next_token = await self.on_twitter_response(response, filter_func)
                     if len(tweet_list) > 0:
                         tweets.extend(tweet_list)
                         read_tweet_success_count.inc(len(tweet_list))
