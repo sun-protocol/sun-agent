@@ -27,17 +27,19 @@ class SteemContextBuilder(object):
     def __init__(
         self,
         node: str = "https://api.steemit.com",
+        host: str = "https://steemit.com",
         post_key: str = "",
         account_name: str = "",
         cache: Optional[CacheStore[str]] = None,
     ):
         self.steem = Steem(node=node, keys=[post_key])
         self.post_key = post_key
+        self.host = host
         self.account_name = account_name
         self.account = Account(self.account_name, blockchain_instance=self.steem)
         self.cache = cache
 
-    def _new_post(self, title: str, body: str, tags: List[str], self_vote: bool = False) -> str:
+    def _new_post(self, title: str, body: str, tags: List[str], self_vote: bool = False) -> tuple[bool, str]:
         """
         create new post on steemit
         :param title:
@@ -53,13 +55,14 @@ class SteemContextBuilder(object):
                 title=title, body=body, author=self.account_name, tags=tags, self_vote=self_vote, permlink=permlink
             )
             logger.info(f"New post {title} success body: {body} result {res}")
+            url = f"{self.host}/{tags[0]}/@{self.account_name}/{permlink}"
             post_steem_success_count.inc()
-            return f"post comment success title : {title}"
+            return True, url
         except Exception as e:
             logger.error(f"New post {title} failed e : {str(e)}")
             logger.error(traceback.format_exc())
             post_steem_failure_count.inc()
-            return f"New post {title} failed e : {str(e)}"
+            return False, f"New post {title} failed e : {str(e)}"
 
     def _reply_comment(self, authorperm: str, body: str) -> str:
         """
