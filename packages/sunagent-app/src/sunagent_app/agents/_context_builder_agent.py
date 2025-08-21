@@ -147,6 +147,10 @@ USER_FIELDS = [
 PLACE_FIELDS = ["contained_within", "country", "country_code", "full_name", "geo", "id", "name", "place_type"]
 
 
+def filter_tweet(tweet: Dict[str, Any], user: Optional[User]) -> bool:  # type: ignore[no-any-unimported]
+    return bool(tweet["mentions_me"])
+
+
 class MentionStream(AsyncStreamingClient):  # type: ignore[misc,no-any-unimported]
     def __init__(self, on_response: Callable[[StreamResponse, str], None], **kwargs: Any) -> None:  # type: ignore[no-any-unimported]
         super().__init__(**kwargs)
@@ -395,19 +399,19 @@ class ContextBuilderAgent:
             except Exception as e:
                 read_tweet_failure_count.inc()
                 logger.error(traceback.format_exc())
-                logger.error(f"error get_home_timeline_with_context(attempt {attempt+1}): {str(e)}")
+                logger.error(f"error get_home_timeline_with_context(attempt {attempt + 1}): {str(e)}")
                 if not isinstance(e, TwitterServerError):
                     break
             await asyncio.sleep(2**attempt)  # 指数退避
         return "[]"
 
-    async def get_mentions_with_context(self) -> str:
-        def filter_tweet(tweet: Dict[str, Any]) -> bool:
-            return bool(tweet["mentions_me"])
-
+    async def get_mentions_with_context(  # type: ignore[no-any-unimported]
+        self, filter_func: Callable[[Dict[str, Any], Optional[User]], bool] = filter_tweet
+    ) -> str:
         """
         Get the new tweets with full conversation context that mentions me since last time.
-        Params: no parameters required
+        Params:
+        - filter_func: Callable to filter each tweet. Defaults to filter_tweet.
         Return: json string, which is a list of tweets
         """
         if not self.run_enabled:
@@ -453,7 +457,7 @@ class ContextBuilderAgent:
                     )
                     if not newest_id and "newest_id" in response.meta:
                         newest_id = response.meta["newest_id"]
-                    tweet_list, next_token = await self.on_twitter_response(response, filter_func=filter_tweet)
+                    tweet_list, next_token = await self.on_twitter_response(response, filter_func)
                     if len(tweet_list) > 0:
                         tweets.extend(tweet_list)
                         read_tweet_success_count.inc(len(tweet_list))
@@ -490,7 +494,7 @@ class ContextBuilderAgent:
             except Exception as e:
                 read_tweet_failure_count.inc()
                 logger.error(traceback.format_exc())
-                logger.error(f"error get_mentions_with_context(attempt {attempt+1}): {str(e)}")
+                logger.error(f"error get_mentions_with_context(attempt {attempt + 1}): {str(e)}")
                 if not isinstance(e, TwitterServerError):
                     break
             await asyncio.sleep(2**attempt)  # 指数退避
@@ -499,7 +503,7 @@ class ContextBuilderAgent:
     async def on_twitter_response(  # type: ignore[no-any-unimported]
         self,
         response: Response | StreamResponse,
-        filter_func: Callable[[Dict[str, Any]], bool] = (lambda x: True),
+        filter_func: Callable[[Dict[str, Any], Optional[User]], bool] = (lambda x, y: True),
     ) -> Tuple[List[Dict[str, Any]], Optional[str]]:
         tweets: List[Dict[str, Any]] = []
         next_token = response.meta["next_token"] if "next_token" in response.meta else None
@@ -510,7 +514,7 @@ class ContextBuilderAgent:
         medias: Dict[str, Media] = self._build_medias(response.includes)  # type: ignore[no-any-unimported]
         all_tweets = self._get_all_tweets(response, users, medias)
         if len(all_tweets) > 0:
-            logger.info(f"first tweet id {all_tweets[0]["id"]}")
+            logger.info(f"first tweet id {all_tweets[0]['id']}")
         await self._cache_tweets(all_tweets)
         has_processed = False
         for tweet in all_tweets:
@@ -519,11 +523,14 @@ class ContextBuilderAgent:
             conversation_id = tweet["conversation_id"]
             host_tweet = await self.get_tweet(conversation_id)
             freq = await self._get_freq(tweet)
+            # 获取用户信息
+            author_id = tweet["author_id"]
+            user = users[author_id] if author_id in users else None
             if (
                 tweet["author_id"] == self.me.data["id"]  # type: ignore[union-attr]
                 or self.block_user_ids.count(int(tweet["author_id"])) != 0
                 or is_processed
-                or not filter_func(tweet)
+                or not filter_func(tweet, user)
                 or (
                     freq >= self.reply_freq_limit
                     and host_tweet
@@ -612,7 +619,7 @@ class ContextBuilderAgent:
                 if isinstance(e, NotFound):
                     logger.warning(f"tweet not exists: {tweet_id}")
                     return None
-                logger.error(f"error get_tweet(attempt {attempt+1}): {str(e)}")
+                logger.error(f"error get_tweet(attempt {attempt + 1}): {str(e)}")
                 if not isinstance(e, TwitterServerError):
                     return None
                 await asyncio.sleep(2**attempt)  # 指数退避
