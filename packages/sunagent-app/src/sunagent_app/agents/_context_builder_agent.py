@@ -146,8 +146,10 @@ USER_FIELDS = [
 ]
 PLACE_FIELDS = ["contained_within", "country", "country_code", "full_name", "geo", "id", "name", "place_type"]
 
+
 def filter_tweet(tweet: Dict[str, Any], user: Optional[User]) -> bool:  # type: ignore[no-any-unimported]
     return bool(tweet["mentions_me"])
+
 
 class MentionStream(AsyncStreamingClient):  # type: ignore[misc,no-any-unimported]
     def __init__(self, on_response: Callable[[StreamResponse, str], None], **kwargs: Any) -> None:  # type: ignore[no-any-unimported]
@@ -406,7 +408,6 @@ class ContextBuilderAgent:
     async def get_mentions_with_context(  # type: ignore[no-any-unimported]
         self, filter_func: Callable[[Dict[str, Any], Optional[User]], bool] = filter_tweet
     ) -> str:
-
         """
         Get the new tweets with full conversation context that mentions me since last time.
         Params:
