@@ -225,10 +225,10 @@ class TweetGetContext:
                 all_raw.extend(tweet_list)
                 if not next_token:
                     break
-                self.pool.release(cli, failed=False)
+                await self.pool.release(cli, failed=False)
 
             except (NotFound, TwitterServerError):
-                self.pool.release(cli, failed=False)
+                await self.pool.release(cli, failed=False)
                 break
             except Exception as e:
                 logger.warning("timeline %s error: %s", endpoint, e)
@@ -237,12 +237,12 @@ class TweetGetContext:
                 # ⑤ 月额度检测
                 if MONTHLY_CAP_INFO in str(e):
                     tweet_monthly_cap.labels(client_key=client_key).set(0)
-                    self.pool.remove(cli)  # 永久踢出
+                    await self.pool.remove(cli)  # 永久踢出
                     logger.error("client %s removed due to monthly cap", client_key)
                     break
                 else:
                     tweet_monthly_cap.labels(client_key=client_key).set(1)
-                    self.pool.release(cli, failed=True)
+                    await self.pool.release(cli, failed=True)
                 break
 
         all_raw.sort(key=lambda t: t["id"])
@@ -376,14 +376,14 @@ class TweetGetContext:
                 tw: Dict[str, Any] = resp.data.data
                 users = self._build_users(resp.includes)
                 self._format_tweet_data(tw, users, self._build_medias(resp.includes))
-                self.pool.release(cli, failed=False)
+                await self.pool.release(cli, failed=False)
                 return tw
             except (NotFound, TwitterServerError):
-                self.pool.release(cli, failed=False)
+                await self.pool.release(cli, failed=False)
                 return None
             except Exception as e:
                 logger.warning("get_tweet retry %s: %s", attempt + 1, e)
-                self.pool.release(cli, failed=True)
+                await self.pool.release(cli, failed=True)
                 if attempt == 2:
                     return None
                 await asyncio.sleep(2**attempt)
