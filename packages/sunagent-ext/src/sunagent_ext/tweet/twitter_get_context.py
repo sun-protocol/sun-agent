@@ -119,7 +119,7 @@ class TweetGetContext:
         white_user_ids: Optional[list[str]] = None,
         reply_freq_limit: int = 5,
         max_depth: int = 5,
-        agent_id: str ="",
+        agent_id: str = "",
     ) -> None:
         self.agent_id = agent_id
         self.pool = pool
