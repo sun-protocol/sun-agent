@@ -19,12 +19,12 @@ logger = logging.getLogger("tweet_get_context")
 
 # ---------- Prometheus 指标 ----------
 read_tweet_success_count = Counter(
-    "read_tweet_success_count", "Number of successful read tweets", labelnames=["client_key"]
+    "ext_read_tweet_success_count", "Number of successful read tweets", labelnames=["client_key"]
 )
 read_tweet_failure_count = Counter(
-    "read_tweet_failure_count", "Number of failed read tweets", labelnames=["client_key"]
+    "ext_read_tweet_failure_count", "Number of failed read tweets", labelnames=["client_key"]
 )
-tweet_monthly_cap = Gauge("tweet_monthly_cap", "0=触顶 1=正常", labelnames=["client_key"])
+tweet_monthly_cap = Gauge("ext_tweet_monthly_cap", "0=触顶 1=正常", labelnames=["client_key"])
 
 # ---------- 字段 ----------
 TWEET_FIELDS = [
