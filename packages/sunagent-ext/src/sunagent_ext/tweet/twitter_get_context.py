@@ -101,6 +101,10 @@ MEDIA_FIELDS = [
 POLL_FIELDS = ["duration_minutes", "end_datetime", "id", "options", "voting_status"]
 PLACE_FIELDS = ["contained_within", "country", "country_code", "full_name", "geo", "id", "name", "place_type"]
 MAX_RESULTS = 100
+PROCESS_KEY_PREFIX = "P:"
+FREQ_KEY_PREFIX = "F:"
+HOME_TIMELINE_ID = "last_home_timeline"
+MENTIONS_TIMELINE_ID = "last_mentions_timeline"
 MONTHLY_CAP_INFO = "Monthly product cap"
 
 
@@ -115,7 +119,9 @@ class TweetGetContext:
         white_user_ids: Optional[list[str]] = None,
         reply_freq_limit: int = 5,
         max_depth: int = 5,
+        agent_id: str ="",
     ) -> None:
+        self.agent_id = agent_id
         self.pool = pool
         self.cache = cache
         self.max_depth = max_depth
@@ -171,7 +177,9 @@ class TweetGetContext:
         start_time = since.isoformat(timespec="seconds")
         next_token = None
         all_raw: list[Dict[str, Any]] = []
-        cache_key = f"{endpoint}:{me_id}"
+        cache_key = f"{self.agent_id}:{MENTIONS_TIMELINE_ID}"
+        if endpoint == "home":
+            cache_key = f"{self.agent_id}:{HOME_TIMELINE_ID}"
         if not since_id and self.cache:
             since_id = self.cache.get(cache_key)
 
@@ -266,19 +274,55 @@ class TweetGetContext:
         return out, next_token
 
     async def _should_keep(self, tweet: Dict[str, Any], filter_func: Callable[[Dict[str, Any]], bool]) -> bool:
+        is_processed = await self._check_tweet_process(tweet["id"])
+        if is_processed:
+            logger.info("already processed %s", tweet["id"])
+            return False
         author_id = str(tweet["author_id"])
         if author_id in self.block_uids:
             logger.info("blocked user %s", author_id)
             return False
-        if self.cache and self.cache.get(f"processed:{tweet['id']}"):
-            logger.info("already processed %s", tweet["id"])
-            return False
-        conv_id = tweet.get("conversation_id", tweet["id"])
-        freq = int(self.cache.get(f"freq:{conv_id}") or 0) if self.cache else 0
+        freq = await self._get_freq(tweet)
         if freq >= self.freq_limit and author_id not in self.white_uids:
             logger.info(f"skip tweet {tweet['id']} freq {freq}")
             return False
+        await self._increase_freq(tweet)
         return filter_func(tweet)
+
+    async def _check_tweet_process(self, tweet_id: str) -> bool:
+        if self.cache is None:
+            return False
+        try:
+            return self.cache.get(f"{self.agent_id}:{PROCESS_KEY_PREFIX}{tweet_id}") is not None
+        except Exception:
+            # regard it as processed if cache not available
+            return True
+
+    async def _mark_tweet_process(self, tweet_id: str) -> None:
+        if self.cache is None:
+            return
+        try:
+            self.cache.set(f"{self.agent_id}:{PROCESS_KEY_PREFIX}{tweet_id}", "")
+        except Exception:
+            pass
+
+    async def _get_freq(self, tweet: Dict[str, Any]) -> int:
+        if self.cache is None:
+            return -1
+        try:
+            freq = self.cache.get(f"{self.agent_id}:{FREQ_KEY_PREFIX}{tweet['conversation_id']}")
+            return int(freq) if freq else 0
+        except Exception:
+            return 0
+
+    async def _increase_freq(self, tweet: Dict[str, Any]) -> None:
+        if self.cache is None:
+            return
+        freq = await self._get_freq(tweet)
+        try:
+            self.cache.set(f"{self.agent_id}:{FREQ_KEY_PREFIX}{tweet['conversation_id']}", str(freq + 1))
+        except Exception:
+            pass
 
     async def _normalize_tweet(self, tweet: Dict[str, Any]) -> Dict[str, Any]:
         wanted = [
