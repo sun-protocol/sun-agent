@@ -106,7 +106,7 @@ MONTHLY_CAP_INFO = "Monthly product cap"
 
 # ---------- 主类 ----------
 class TweetGetContext:
-    def __init__( # type: ignore[no-untyped-def]
+    def __init__(  # type: ignore[no-untyped-def]
         self,
         pool: TwitterClientPool,  # 外部池子
         cache=None,  # 可选缓存
@@ -244,7 +244,7 @@ class TweetGetContext:
         return all_raw
 
     # ===================== 中间处理钩子（保留） =====================
-    async def on_twitter_response( # type: ignore[no-any-unimported]
+    async def on_twitter_response(  # type: ignore[no-any-unimported]
         self,
         response: TwitterResponse,
         filter_func: Callable[[Dict[str, Any]], bool],
@@ -346,7 +346,7 @@ class TweetGetContext:
         return None
 
     # ===================== 原方法签名保持不变 =====================
-    def _format_tweet_data(self, tweet: Dict[str, Any], users: Dict[str, User], medias: Dict[str, Media]) -> None: # type: ignore[no-any-unimported]
+    def _format_tweet_data(self, tweet: Dict[str, Any], users: Dict[str, User], medias: Dict[str, Media]) -> None:  # type: ignore[no-any-unimported]
         """标准化推文内容"""
         author_id = tweet["author_id"]
         user = users[author_id] if author_id in users else None
@@ -377,21 +377,21 @@ class TweetGetContext:
             if key in medias and medias[key].type == "photo":
                 tweet["image_url"] = medias[key].url
 
-    def _build_users(self, includes: Dict[str, Any]) -> Dict[str, User]: # type: ignore[no-any-unimported]
-        users: Dict[str, User] = {} # type: ignore[no-any-unimported]
+    def _build_users(self, includes: Dict[str, Any]) -> Dict[str, User]:  # type: ignore[no-any-unimported]
+        users: Dict[str, User] = {}  # type: ignore[no-any-unimported]
         if "users" in includes:
             for user in includes["users"]:
                 users[str(user.id)] = user
         return users
 
-    def _build_medias(self, includes: Dict[str, Any]) -> Dict[str, Media]: # type: ignore[no-any-unimported]
-        medias: Dict[str, Media] = {} # type: ignore[no-any-unimported]
+    def _build_medias(self, includes: Dict[str, Any]) -> Dict[str, Media]:  # type: ignore[no-any-unimported]
+        medias: Dict[str, Media] = {}  # type: ignore[no-any-unimported]
         if "media" in includes:
             for media in includes["media"]:
                 medias[str(media.media_key)] = media
         return medias
 
-    def _get_all_tweets( # type: ignore[no-any-unimported]
+    def _get_all_tweets(  # type: ignore[no-any-unimported]
         self, response: TwitterResponse, users: Dict[str, User], medias: Dict[str, Media]
     ) -> list[Dict[str, Any]]:
         all_tweets: list[Dict[str, Any]] = []
