@@ -4,7 +4,6 @@ Twitter 时间线 & Mention 增量抓取 + 对话链拼合
 """
 
 import asyncio
-import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, cast
@@ -119,9 +118,7 @@ class TweetGetContext:
         white_user_ids: Optional[list[str]] = None,
         reply_freq_limit: int = 5,
         max_depth: int = 5,
-        agent_id: str = "",
     ) -> None:
-        self.agent_id = agent_id
         self.pool = pool
         self.cache = cache
         self.max_depth = max_depth
@@ -136,6 +133,7 @@ class TweetGetContext:
     async def get_home_timeline_with_context(
         self,
         me_id: str,
+        agent_id: str,
         hours: int = 24,
         since_id: Optional[str] = None,
         filter_func: Optional[Callable[[Dict[str, Any]], bool]] = None,
@@ -145,12 +143,14 @@ class TweetGetContext:
             me_id=me_id,
             hours=hours,
             since_id=since_id,
+            agent_id=agent_id,
             filter_func=filter_func or (lambda _: True),
         )
 
     async def get_mentions_with_context(
         self,
         me_id: str,
+        agent_id: str,
         hours: int = 24,
         since_id: Optional[str] = None,
         filter_func: Optional[Callable[[Dict[str, Any]], bool]] = None,
@@ -160,6 +160,7 @@ class TweetGetContext:
             endpoint="mentions",
             me_id=me_id,
             hours=hours,
+            agent_id=agent_id,
             since_id=since_id,
             filter_func=filter_func or (lambda _: True),
         )
@@ -172,14 +173,15 @@ class TweetGetContext:
         hours: int,
         since_id: Optional[str],
         filter_func: Callable[[Dict[str, Any]], bool],
+        agent_id: str,
     ) -> list[Dict[str, Any]]:
         since = datetime.now(timezone.utc) - timedelta(hours=hours)
         start_time = since.isoformat(timespec="seconds")
         next_token = None
         all_raw: list[Dict[str, Any]] = []
-        cache_key = f"{self.agent_id}:{MENTIONS_TIMELINE_ID}"
+        cache_key = f"{agent_id}:{MENTIONS_TIMELINE_ID}"
         if endpoint == "home":
-            cache_key = f"{self.agent_id}:{HOME_TIMELINE_ID}"
+            cache_key = f"{agent_id}:{HOME_TIMELINE_ID}"
         if not since_id and self.cache:
             since_id = self.cache.get(cache_key)
 
@@ -221,14 +223,11 @@ class TweetGetContext:
                 read_tweet_success_count.labels(client_key=client_key).inc(len(resp.data or []))
 
                 # 交给中间层处理
-                tweet_list, next_token = await self.on_twitter_response(resp, filter_func)
+                tweet_list, next_token = await self.on_twitter_response(agent_id, resp, filter_func)
                 all_raw.extend(tweet_list)
                 if not next_token:
                     break
-                await self.pool.release(cli, failed=False)
-
             except (NotFound, TwitterServerError):
-                await self.pool.release(cli, failed=False)
                 break
             except Exception as e:
                 logger.warning("timeline %s error: %s", endpoint, e)
@@ -242,7 +241,7 @@ class TweetGetContext:
                     break
                 else:
                     tweet_monthly_cap.labels(client_key=client_key).set(1)
-                    await self.pool.release(cli, failed=True)
+                    await self.pool.report_failure(cli)
                 break
 
         all_raw.sort(key=lambda t: t["id"])
@@ -254,6 +253,7 @@ class TweetGetContext:
     # ===================== 中间处理钩子（保留） =====================
     async def on_twitter_response(  # type: ignore[no-any-unimported]
         self,
+        agent_id: str,
         response: TwitterResponse,
         filter_func: Callable[[Dict[str, Any]], bool],
     ) -> tuple[list[Dict[str, Any]], Optional[str]]:
@@ -267,14 +267,16 @@ class TweetGetContext:
         out: list[Dict[str, Any]] = []
 
         for tweet in all_tweets:
-            if not await self._should_keep(tweet, filter_func):
+            if not await self._should_keep(agent_id, tweet, filter_func):
                 continue
             norm = await self._normalize_tweet(tweet)
             out.append(norm)
         return out, next_token
 
-    async def _should_keep(self, tweet: Dict[str, Any], filter_func: Callable[[Dict[str, Any]], bool]) -> bool:
-        is_processed = await self._check_tweet_process(tweet["id"])
+    async def _should_keep(
+        self, agent_id: str, tweet: Dict[str, Any], filter_func: Callable[[Dict[str, Any]], bool]
+    ) -> bool:
+        is_processed = await self._check_tweet_process(tweet["id"], agent_id)
         if is_processed:
             logger.info("already processed %s", tweet["id"])
             return False
@@ -282,45 +284,45 @@ class TweetGetContext:
         if author_id in self.block_uids:
             logger.info("blocked user %s", author_id)
             return False
-        freq = await self._get_freq(tweet)
+        freq = await self._get_freq(agent_id, tweet)
         if freq >= self.freq_limit and author_id not in self.white_uids:
             logger.info(f"skip tweet {tweet['id']} freq {freq}")
             return False
-        await self._increase_freq(tweet)
+        await self._increase_freq(agent_id, tweet)
         return filter_func(tweet)
 
-    async def _check_tweet_process(self, tweet_id: str) -> bool:
+    async def _check_tweet_process(self, tweet_id: str, agent_id: str) -> bool:
         if self.cache is None:
             return False
         try:
-            return self.cache.get(f"{self.agent_id}:{PROCESS_KEY_PREFIX}{tweet_id}") is not None
+            return self.cache.get(f"{agent_id}:{PROCESS_KEY_PREFIX}{tweet_id}") is not None
         except Exception:
             # regard it as processed if cache not available
             return True
 
-    async def _mark_tweet_process(self, tweet_id: str) -> None:
+    async def _mark_tweet_process(self, tweet_id: str, agent_id: str) -> None:
         if self.cache is None:
             return
         try:
-            self.cache.set(f"{self.agent_id}:{PROCESS_KEY_PREFIX}{tweet_id}", "")
+            self.cache.set(f"{agent_id}:{PROCESS_KEY_PREFIX}{tweet_id}", "")
         except Exception:
             pass
 
-    async def _get_freq(self, tweet: Dict[str, Any]) -> int:
+    async def _get_freq(self, agent_id: str, tweet: Dict[str, Any]) -> int:
         if self.cache is None:
             return -1
         try:
-            freq = self.cache.get(f"{self.agent_id}:{FREQ_KEY_PREFIX}{tweet['conversation_id']}")
+            freq = self.cache.get(f"{agent_id}:{FREQ_KEY_PREFIX}{tweet['conversation_id']}")
             return int(freq) if freq else 0
         except Exception:
             return 0
 
-    async def _increase_freq(self, tweet: Dict[str, Any]) -> None:
+    async def _increase_freq(self, agent_id: str, tweet: Dict[str, Any]) -> None:
         if self.cache is None:
             return
-        freq = await self._get_freq(tweet)
+        freq = await self._get_freq(agent_id, tweet)
         try:
-            self.cache.set(f"{self.agent_id}:{FREQ_KEY_PREFIX}{tweet['conversation_id']}", str(freq + 1))
+            self.cache.set(f"{agent_id}:{FREQ_KEY_PREFIX}{tweet['conversation_id']}", str(freq + 1))
         except Exception:
             pass
 
@@ -376,14 +378,12 @@ class TweetGetContext:
                 tw: Dict[str, Any] = resp.data.data
                 users = self._build_users(resp.includes)
                 self._format_tweet_data(tw, users, self._build_medias(resp.includes))
-                await self.pool.release(cli, failed=False)
                 return tw
             except (NotFound, TwitterServerError):
-                await self.pool.release(cli, failed=False)
                 return None
             except Exception as e:
                 logger.warning("get_tweet retry %s: %s", attempt + 1, e)
-                await self.pool.release(cli, failed=True)
+                await self.pool.report_failure(cli)
                 if attempt == 2:
                     return None
                 await asyncio.sleep(2**attempt)
