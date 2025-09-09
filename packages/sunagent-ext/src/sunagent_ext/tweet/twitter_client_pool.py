@@ -34,42 +34,38 @@ class TwitterClientPool:
         if any(item.dead_at is None for item in self._pool):
             self._not_empty.set()
 
-    async def acquire(self) -> tuple[Client, str]:  # type: ignore[no-any-unimported,return]
-        """
-        以轮询方式获取一个可用的客户端。
-        如果当前没有可用的客户端，将异步等待直到有客户端复活或被添加。
-        """
+    async def acquire(self) -> tuple[Client, str]:  # type: ignore[no-any-unimported]
         while True:
             async with self._lock:
-                # 0. 如果池子已空（所有客户端被永久移除），直接挂起等待
+                # 0. 处理池子为空的边缘情况
                 if not self._pool:
                     self._not_empty.clear()
-                    # 跳出 with-block 以释放锁，然后等待
+                    # 在锁外等待，但先释放锁
                     raise RuntimeError("TwitterClientPool: 所有客户端已被永久摘除，请重建池子")
-                # 1. 检查并复活到期的客户端
                 now = time.time()
+                # 1. 复活
                 revived = False
                 for it in self._pool:
                     if it.dead_at and now - it.dead_at >= self._retry_after:
                         it.dead_at = None
                         revived = True
                         logger.info("client %s revived", it.client_key)
-                if revived:
-                    self._not_empty.set()
-                # 2. 真·轮询：在完整池子上跳过 dead 的
-                for _ in range(len(self._pool)):
-                    idx = self._rr_idx % len(self._pool)
-                    self._rr_idx += 1
-                    chosen = self._pool[idx]
-                    if chosen.dead_at is None:
-                        # 移到尾部，实现 RR
-                        self._pool.pop(idx)
-                        self._pool.append(chosen)
-                        return chosen.client, chosen.client_key
-                # 3. 没有 alive 的
-                self._not_empty.clear()
-            # 释放锁后再等，避免忙等
-            await self._not_empty.wait()
+                    if revived:
+                        self._not_empty.set()
+                    # 2. 简化的、正确的轮询
+                    # 从上一次的位置开始，最多检查 N 次 (N=池子大小)
+                    for i in range(len(self._pool)):
+                        # 使用 % 来确保索引总在有效范围内
+                        idx = (self._rr_idx + i) % len(self._pool)
+                        chosen = self._pool[idx]
+                        if chosen.dead_at is None:
+                            # 找到了一个可用的，更新下一次开始搜索的指针
+                            self._rr_idx = idx + 1
+                            return chosen.client, chosen.client_key
+                    # 3. 如果循环走完都没有找到 alive 的
+                    self._not_empty.clear()
+                    # 4. 释放锁后等待，避免死锁和忙等
+                    await self._not_empty.wait()
 
     # -------------------- 加锁摘除 --------------------
     async def remove(self, client: tweepy.Client) -> None:  # type: ignore[no-any-unimported]
