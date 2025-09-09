@@ -34,7 +34,7 @@ class TwitterClientPool:
         if any(item.dead_at is None for item in self._pool):
             self._not_empty.set()
 
-    async def acquire(self) -> tuple[Client, str]: # type: ignore[no-any-unimported]
+    async def acquire(self) -> tuple[Client, str]:  # type: ignore[no-any-unimported]
         """
         以轮询方式获取一个可用的客户端。
         如果当前没有可用的客户端，将异步等待直到有客户端复活或被添加。
