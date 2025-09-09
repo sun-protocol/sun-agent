@@ -40,6 +40,7 @@ class TwitterClientPool:
         如果当前没有可用的客户端，将异步等待直到有客户端复活或被添加。
         """
         while True:
+            need_wake = True
             async with self._lock:
                 # 0. 如果池子已空（所有客户端被永久移除），直接挂起等待
                 if not self._pool:
@@ -55,7 +56,9 @@ class TwitterClientPool:
                         revived = True
                         logger.info("client %s revived", it.client_key)
                 if revived:
-                    self._not_empty.set()
+                    need_wake = True
+                else:
+                    need_wake = False
                 # 2. 健壮的轮询逻辑
                 # 从上一个位置开始，遍历整个池子寻找可用的客户端
                 for i in range(len(self._pool)):
@@ -67,6 +70,8 @@ class TwitterClientPool:
                         return chosen.client, chosen.client_key
                 # 3. 如果没有找到可用的客户端，清空事件，准备等待
                 self._not_empty.clear()
+            if need_wake:
+                self._not_empty.set()
             # 4. 在锁外等待，避免阻塞其他协程
             await self._not_empty.wait()
 
