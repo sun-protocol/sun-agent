@@ -5,12 +5,14 @@ Twitter 时间线 & Mention 增量抓取 + 对话链拼合
 
 import asyncio
 import logging
+import traceback
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, cast
 
 from prometheus_client import Counter, Gauge
 from tweepy import Media, NotFound, TwitterServerError, User  # 保持原类型注解
 from tweepy import Response as TwitterResponse
+import tweepy
 
 from sunagent_ext.tweet.twitter_client_pool import TwitterClientPool
 
@@ -223,7 +225,7 @@ class TweetGetContext:
                 read_tweet_success_count.labels(client_key=client_key).inc(len(resp.data or []))
 
                 # 交给中间层处理
-                tweet_list, next_token = await self.on_twitter_response(agent_id, resp, filter_func)
+                tweet_list, next_token = await self.on_twitter_response(agent_id, me_id, resp, filter_func)
                 all_raw.extend(tweet_list)
                 if not next_token:
                     break
@@ -254,6 +256,7 @@ class TweetGetContext:
     async def on_twitter_response(  # type: ignore[no-any-unimported]
         self,
         agent_id: str,
+        me_id: str,
         response: TwitterResponse,
         filter_func: Callable[[Dict[str, Any]], bool],
     ) -> tuple[list[Dict[str, Any]], Optional[str]]:
@@ -267,20 +270,23 @@ class TweetGetContext:
         out: list[Dict[str, Any]] = []
 
         for tweet in all_tweets:
-            if not await self._should_keep(agent_id, tweet, filter_func):
+            if not await self._should_keep(agent_id, me_id, tweet, filter_func):
                 continue
             norm = await self._normalize_tweet(tweet)
             out.append(norm)
         return out, next_token
 
     async def _should_keep(
-        self, agent_id: str, tweet: Dict[str, Any], filter_func: Callable[[Dict[str, Any]], bool]
+        self, agent_id: str,  me_id: str, tweet: Dict[str, Any], filter_func: Callable[[Dict[str, Any]], bool]
     ) -> bool:
         is_processed = await self._check_tweet_process(tweet["id"], agent_id)
         if is_processed:
             logger.info("already processed %s", tweet["id"])
             return False
         author_id = str(tweet["author_id"])
+        if me_id == author_id:
+            logger.info("skip my tweet %s", tweet["id"])
+            return False
         if author_id in self.block_uids:
             logger.info("blocked user %s", author_id)
             return False
@@ -365,6 +371,101 @@ class TweetGetContext:
             if parent:
                 await self._recursive_fetch(parent, chain, depth + 1)
         chain.append(tweet)
+
+    async def fetch_new_tweets_manual_( self,
+            ids: List[str],
+            last_seen_id: str | None = None,
+            ):
+        """
+        1. 取所有 ALIVE KOL 的 twitter_id
+        2. 将 id 列表拆分成多条不超长 query
+        3. 逐条交给 fetch_new_tweets_manual_tweets 翻页
+        4. 返回全部结果以及 **所有结果中最大的 tweet_id**
+        """
+        BASE_EXTRA = " -is:retweet"
+        max_len = 512 - len(BASE_EXTRA) - 10
+        queries: List[str] = []
+
+        buf, first = [], True
+        for uid in ids:
+            clause = f"from:{uid}"
+            if len(" OR ".join(buf + [clause])) > max_len:
+                queries.append(" OR ".join(buf) + BASE_EXTRA)
+                buf, first = [clause], True
+            else:
+                buf.append(clause)
+                first = False
+        if buf:
+            queries.append(" OR ".join(buf) + BASE_EXTRA)
+
+        # 3) 逐条调用内层并合并
+        all_tweets: List[tweepy.Tweet] = []
+        for q in queries:
+            tweets = await self.fetch_new_tweets_manual_tweets(
+                query=q,
+                last_seen_id=last_seen_id
+            )
+            all_tweets.extend(tweets)
+            await asyncio.sleep(30)
+
+        # 4) 取所有结果中最大的 id 作为 last_seen_id
+        last_id = max((tw.id for tw in all_tweets), default=None)
+        return all_tweets, last_id
+
+    async def get_kol_tweet(self, kol_ids: List[str]):
+        cache_key = "kol_last_seen_id"
+        last_seen_id = await self.cache.get(cache_key)
+        tweets, last_seen_id = await self.fetch_new_tweets_manual_(ids=kol_ids, last_seen_id=last_seen_id)
+        await self.cache.set(cache_key, last_seen_id)
+        return tweets
+
+    async def fetch_new_tweets_manual_tweets(
+            self,
+            query: str,
+            last_seen_id: str | None = None,
+            max_per_page: int = 100,
+            hours: int = 24
+    ):
+        tweets = []
+        next_token = None
+
+        since = datetime.now(timezone.utc) - timedelta(hours=hours)
+        start_time = None if last_seen_id else since.isoformat(timespec="seconds")
+        logger.info(f"query: {query}")
+        while True:
+            cli = None
+            try:
+                cli, key = await self.pool.acquire()
+                resp = cli.search_recent_tweets(
+                    query=query,
+                    start_time=start_time,
+                    since_id=last_seen_id,
+                    max_results=max_per_page,
+                    tweet_fields=TWEET_FIELDS,
+                    next_token=next_token,
+                    user_auth=True
+                )
+                page_data = resp.data or []
+                logger.info(f"page_data: {len(page_data)}")
+                for tw in page_data:
+                    # 1. 已读过的直接停
+                    tweets.append(tw)
+                    read_tweet_success_count.inc()
+                next_token = resp.meta.get("next_token")
+                if not next_token:
+                    break
+            except tweepy.TooManyRequests as e:
+                logger.error(traceback.format_exc())
+                read_tweet_failure_count.inc()
+                if cli:
+                    await self.pool.report_failure(cli)
+                return tweets
+            except tweepy.TweepyException as e:
+                if cli:
+                    await self.pool.report_failure(cli)
+                logger.error(traceback.format_exc())
+                return tweets
+        return tweets
 
     async def _get_tweet_with_retry(self, tweet_id: str) -> Optional[Dict[str, Any]]:
         for attempt in range(3):

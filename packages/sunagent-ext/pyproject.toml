@@ -20,6 +20,7 @@ dependencies = [
     "onepassword-sdk>=0.3.0",
     "pytz",
     "redis",
+    "prometheus_client",
     "requests",
 ]
 
