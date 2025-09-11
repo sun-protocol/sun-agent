@@ -402,7 +402,6 @@ class TweetGetContext:
         for q in queries:
             tweets = await self.fetch_new_tweets_manual_tweets(query=q, last_seen_id=last_seen_id)
             all_tweets.extend(tweets)
-            await asyncio.sleep(30)
 
         # 4) 取所有结果中最大的 id 作为 last_seen_id
         last_id = max((tw.id for tw in all_tweets), default=None)
@@ -412,7 +411,9 @@ class TweetGetContext:
         cache_key = "kol_last_seen_id"
         last_seen_id = self.cache.get(cache_key)
         tweets, last_seen_id = await self.fetch_new_tweets_manual_(ids=kol_ids, last_seen_id=last_seen_id)
-        await self.cache.set(cache_key, last_seen_id)
+        logger.info(f"get_kol_tweet tweets: {len(tweets)} last_seen_id: {last_seen_id}")
+        if last_seen_id:
+            self.cache.set(cache_key, last_seen_id)
         return tweets
 
     async def fetch_new_tweets_manual_tweets(  # type: ignore[no-any-unimported]
@@ -420,7 +421,6 @@ class TweetGetContext:
     ) -> List[Tweet]:
         tweets = []
         next_token = None
-
         since = datetime.now(timezone.utc) - timedelta(hours=hours)
         start_time = None if last_seen_id else since.isoformat(timespec="seconds")
         logger.info(f"query: {query}")
