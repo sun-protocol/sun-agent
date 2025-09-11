@@ -22,13 +22,13 @@ class TweetFromQueueContext:
     def __init__(
         self,
         size: int,
-        agent_id: str,
+        user_ids: List[str],
         nats_url: str,
         callback: Callable[[List[dict[str, Any]]], Any],
         flush_seconds: int = 10,
     ):
         self.size = size
-        self.agent_id = agent_id
+        self.user_ids = user_ids
         self.nats_url = nats_url
         self.flush_seconds = flush_seconds
 
@@ -43,7 +43,7 @@ class TweetFromQueueContext:
         # 1. 连接 NATS
         self._nc = await nats.connect(self.nats_url)  # type: ignore[assignment]
         await self._nc.subscribe(subject, cb=self._nc_consume)  # type: ignore[attr-defined]
-        logger.info("Subscribed to <%s>, agent=%s", subject, self.agent_id)
+        logger.info("Subscribed to <%s>, agent=%s", subject, self.user_ids)
 
         # 2. 启动 APScheduler 定时 flush
         self._scheduler = AsyncIOScheduler()
@@ -73,11 +73,10 @@ class TweetFromQueueContext:
         try:
             tweet = json.loads(msg.data.decode())
             tweet = self._fix_tweet_dict(tweet)
+            if tweet["author_id"] not in self.user_ids:
+                return
         except Exception as e:
             logger.exception("Bad message: %s", e)
-            return
-
-        if self.agent_id not in tweet.get("agent_ids", []):
             return
 
         async with self._lock:
@@ -96,12 +95,16 @@ class TweetFromQueueContext:
     async def _flush(self) -> None:
         if not self._buffer:
             return
-        logger.info("Flush %d tweets", len(self._buffer))
+        # 1. 锁内只做“拷贝 + 清空”
+        async with self._lock:
+            to_send = self._buffer.copy()
+            self._buffer.clear()
+        # 2. 锁外执行回调，避免阻塞后续入队 / 定时 flush
+        logger.info("Flush %d tweets", len(to_send))
         try:
-            await self._callback(self._buffer.copy())
+            await self._callback(to_send)
         except Exception as e:
             logger.exception("Callback error: %s", e)
-        self._buffer.clear()
 
     # -------------------- 工具 --------------------
     @staticmethod
