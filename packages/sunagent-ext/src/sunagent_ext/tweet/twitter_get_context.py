@@ -378,7 +378,7 @@ class TweetGetContext:
         last_seen_id: str | None = None,
     ) -> tuple[List[Tweet], str | None]:
         """
-        1. 取所有 ALIVE KOL 的 twitter_id
+        1. 取所有 ALIVE user 的 twitter_id
         2. 将 id 列表拆分成多条不超长 query
         3. 逐条交给 fetch_new_tweets_manual_tweets 翻页
         4. 返回全部结果以及 **所有结果中最大的 tweet_id**
@@ -407,11 +407,11 @@ class TweetGetContext:
         last_id = max((tw.id for tw in all_tweets), default=None)
         return all_tweets, last_id
 
-    async def get_kol_tweet(self, kol_ids: List[str]) -> List[Tweet]:  # type: ignore[no-any-unimported]
-        cache_key = "kol_last_seen_id"
+    async def get_user_tweet(self, user_ids: List[str]) -> List[Tweet]:  # type: ignore[no-any-unimported]
+        cache_key = "user_last_seen_id"
         last_seen_id = self.cache.get(cache_key)
-        tweets, last_seen_id = await self.fetch_new_tweets_manual_(ids=kol_ids, last_seen_id=last_seen_id)
-        logger.info(f"get_kol_tweet tweets: {len(tweets)} last_seen_id: {last_seen_id}")
+        tweets, last_seen_id = await self.fetch_new_tweets_manual_(ids=user_ids, last_seen_id=last_seen_id)
+        logger.info(f"get_user_tweet tweets: {len(tweets)} last_seen_id: {last_seen_id}")
         if last_seen_id:
             self.cache.set(cache_key, last_seen_id)
         return tweets
@@ -419,13 +419,13 @@ class TweetGetContext:
     async def fetch_new_tweets_manual_tweets(  # type: ignore[no-any-unimported]
         self, query: str, last_seen_id: str | None = None, max_per_page: int = 100, hours: int = 24
     ) -> List[Tweet]:
-        tweets = []
+        tweets: List[Any] = []
         next_token = None
         since = datetime.now(timezone.utc) - timedelta(hours=hours)
         start_time = None if last_seen_id else since.isoformat(timespec="seconds")
         logger.info(f"query: {query}")
         while True:
-            cli = None
+            cli, key = None, ""
             try:
                 cli, key = await self.pool.acquire()
                 resp = cli.search_recent_tweets(
@@ -439,9 +439,7 @@ class TweetGetContext:
                 )
                 page_data = resp.data or []
                 logger.info(f"page_data: {len(page_data)}")
-                for tw in page_data:
-                    # 1. 已读过的直接停
-                    tweets.append(tw)
+                tweets.extend(page_data)
                 read_tweet_success_count.labels(client_key=key).inc(len(resp.data or []))
                 next_token = resp.meta.get("next_token")
                 if not next_token:
