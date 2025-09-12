@@ -8,6 +8,7 @@ from typing import Any, Callable, List
 import nats
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from nats.aio.msg import Msg
+from nats.aio.subscription import Subscription
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ class TweetFromQueueContext:
         self._nc = None
         self._buffer: List[dict[str, Any]] = []
         self._callback: Callable[[List[dict[str, Any]]], Any] = callback
+        self._sub: Subscription | None = None
         self._scheduler: AsyncIOScheduler | None = None  # type: ignore[no-any-unimported]
         self._lock = asyncio.Lock()
 
@@ -42,7 +44,7 @@ class TweetFromQueueContext:
     async def start(self, subject: str) -> None:
         # 1. 连接 NATS
         self._nc = await nats.connect(self.nats_url)  # type: ignore[assignment]
-        await self._nc.subscribe(subject, cb=self._nc_consume)  # type: ignore[attr-defined]
+        self._sub = await self._nc.subscribe(subject, cb=self._nc_consume)  # type: ignore[attr-defined]
         logger.info("Subscribed to <%s>, agent=%s", subject, self.user_ids)
 
         # 2. 启动 APScheduler 定时 flush
@@ -57,13 +59,21 @@ class TweetFromQueueContext:
         self._scheduler.start()
 
     async def close(self) -> None:
-        """优雅关闭：停调度器 -> 刷尾数据 -> 断 NATS"""
+        """优雅关闭：停订阅 -> 停调度器 -> 刷剩余数据 -> 断 NATS"""
+        # 1. 停止订阅（不再接收新消息）
+        if self._sub:
+            await self._sub.unsubscribe()
+            self._sub = None
+
+        # 2. 停止调度器（不再定时 flush）
         if self._scheduler:
             self._scheduler.shutdown(wait=False)
 
+        # 3. 刷剩余数据
         async with self._lock:
             await self._flush()
 
+        # 4. 断开 NATS
         if self._nc:
             await self._nc.close()
             logger.info("NATS connection closed")
