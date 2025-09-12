@@ -50,7 +50,7 @@ class TweetFromQueueContext:
         # 2. 启动 APScheduler 定时 flush
         self._scheduler = AsyncIOScheduler()
         self._scheduler.add_job(
-            self._flush_wrap,  # 定时执行的协程
+            self._flush,  # 定时执行的协程
             trigger="interval",
             seconds=self.flush_seconds,
             max_instances=1,
@@ -95,21 +95,18 @@ class TweetFromQueueContext:
             if len(self._buffer) >= self.size:
                 await self._flush()
 
-    # -------------------- 定时刷新包装 --------------------
-    async def _flush_wrap(self) -> None:
-        """APScheduler 只支持调用普通函数，这里包一层协程"""
-        async with self._lock:
-            await self._flush()
-
     # -------------------- 真正刷新 --------------------
     async def _flush(self) -> None:
+        # 1. 无数据直接返回（避免空跑）
         if not self._buffer:
             return
-        # 1. 锁内只做“拷贝 + 清空”
+
+        # 2. 锁内：拷贝 + 清空
         async with self._lock:
             to_send = self._buffer.copy()
             self._buffer.clear()
-        # 2. 锁外执行回调，避免阻塞后续入队 / 定时 flush
+
+        # 3. 锁外：执行回调
         logger.info("Flush %d tweets", len(to_send))
         try:
             await self._callback(to_send)
