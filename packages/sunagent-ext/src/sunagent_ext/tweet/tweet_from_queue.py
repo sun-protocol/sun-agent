@@ -49,14 +49,18 @@ class TweetFromQueueContext:
 
     async def stop(self) -> None:
         logger.info("Stopping AsyncBatchingQueue...")
-        self._stop_evt.set()
-        # 1. 先塞哨兵，让 worker 从 queue.get() 立即返回
-        await self._queue.put(self._SENTINEL)
-        if self._worker_task:
-            await self._worker_task
+
+        # 1. 立即停止接收新消息
         if self._sub:
             await self._sub.unsubscribe()
-        # 2. worker loop 退出前已经 _drain_remaining()，这里不再 _flush()
+
+        # 2. 通知 worker 退出并等待它刷完剩余
+        self._stop_evt.set()
+        await self._queue.put(self._SENTINEL)  # 让 worker 从 queue.get() 立即返回
+        if self._worker_task:
+            await self._worker_task  # 内部已 _drain_remaining()
+
+        # 3. 关闭 NATS 连接
         if self._nc:
             await self._nc.close()
         logger.info("AsyncBatchingQueue stopped")
