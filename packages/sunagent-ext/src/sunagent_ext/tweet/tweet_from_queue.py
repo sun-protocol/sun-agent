@@ -11,6 +11,9 @@ logger = logging.getLogger(__name__)
 
 
 class TweetFromQueueContext:
+    # ---------- 新增哨兵 ----------
+    _SENTINEL = object()  # 用于通知 worker 立即退出
+
     def __init__(
         self,
         *,
@@ -32,7 +35,8 @@ class TweetFromQueueContext:
 
         self._nc: Optional[nats.NATS] = None  # type: ignore[name-defined]
         self._sub = None
-        self._queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
+        # 队列元素现在是 Dict | sentinel
+        self._queue: asyncio.Queue[Any] = asyncio.Queue()
         self._stop_evt = asyncio.Event()
         self._worker_task: Optional[asyncio.Task] = None  # type: ignore[type-arg]
 
@@ -41,17 +45,18 @@ class TweetFromQueueContext:
         self._nc = await nats.connect(self.nats_url)
         self._sub = await self._nc.subscribe(self.subject, cb=self._on_msg)  # type: ignore[assignment]
         logger.info("Subscribed to <%s>, filter=%s", self.subject, self.user_ids)
-        # 启动单协程 worker
         self._worker_task = asyncio.create_task(self._worker_loop())
 
     async def stop(self) -> None:
         logger.info("Stopping AsyncBatchingQueue...")
         self._stop_evt.set()
+        # 1. 先塞哨兵，让 worker 从 queue.get() 立即返回
+        await self._queue.put(self._SENTINEL)
         if self._worker_task:
             await self._worker_task
         if self._sub:
             await self._sub.unsubscribe()
-        await self._flush()  # 刷剩余
+        # 2. worker loop 退出前已经 _drain_remaining()，这里不再 _flush()
         if self._nc:
             await self._nc.close()
         logger.info("AsyncBatchingQueue stopped")
@@ -72,27 +77,24 @@ class TweetFromQueueContext:
         try:
             tweet = json.loads(msg.data.decode())
             tweet = self._fix_tweet_dict(tweet)
-            # if self.user_ids and tweet.get("author_id") not in self.user_ids:
-            #     return
+            if self.user_ids and tweet.get("author_id") not in self.user_ids:
+                return
         except Exception as e:
             logger.exception("Bad msg: %s", e)
             return
         await self.add(tweet)
 
-    # -------------------- 核心 worker：完全模仿 _worker_loop --------------------
+    # -------------------- 核心 worker --------------------
     async def _worker_loop(self) -> None:
-        """单协程：等第一条 -> 设 deadline -> 继续 get(timeout=剩余时间) -> 满批/超时刷"""
+        """单协程：永久阻塞等第一条 -> 设 deadline -> 超时/满批刷 -> 收到哨兵退出"""
         while not self._stop_evt.is_set():
             batch: List[Dict[str, Any]] = []
-            deadline = None
-
-            # 1. 阻塞等第一条
-            try:
-                first = await asyncio.wait_for(self._queue.get(), timeout=0.1)
-                batch.append(first)
-                deadline = asyncio.get_event_loop().time() + self.flush_seconds
-            except asyncio.TimeoutError:
-                continue
+            # 1. 永久阻塞等第一条（CPU 不再空转）
+            first = await self._queue.get()
+            if first is self._SENTINEL:  # 收到哨兵直接退出
+                break
+            batch.append(first)
+            deadline = asyncio.get_event_loop().time() + self.flush_seconds
 
             # 2. 收集剩余
             while len(batch) < self.batch_size and not self._stop_evt.is_set():
@@ -101,6 +103,8 @@ class TweetFromQueueContext:
                     break
                 try:
                     item = await asyncio.wait_for(self._queue.get(), timeout=remaining)
+                    if item is self._SENTINEL:  # 哨兵提前结束收集
+                        break
                     batch.append(item)
                 except asyncio.TimeoutError:
                     break
@@ -111,14 +115,18 @@ class TweetFromQueueContext:
                     await self.callback(batch)
                 except Exception as e:
                     logger.exception("Callback error: %s", e)
+
         # 4. 退出时刷剩余
         await self._drain_remaining()
 
     async def _flush(self) -> None:
-        """同步刷剩余（给 stop 用）"""
+        """同步刷剩余（给 _drain_remaining 用）"""
         batch = []
         while not self._queue.empty():
-            batch.append(self._queue.get_nowait())
+            item = self._queue.get_nowait()
+            if item is self._SENTINEL:  # 忽略哨兵
+                continue
+            batch.append(item)
         if batch:
             try:
                 await self.callback(batch)
