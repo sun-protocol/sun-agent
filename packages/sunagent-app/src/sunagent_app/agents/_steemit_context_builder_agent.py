@@ -78,11 +78,11 @@ class SteemContextBuilder(object):
             if self.cache:
                 self.cache.set(cache_key, "processed")
             logger.info(f"Reply comment {authorperm} success body: {body} result {result}")
-            read_steem_success_count.inc()
+            post_steem_success_count.inc()
             return f"Reply comment {authorperm} success body: {body}"
         except Exception as e:
             logger.error(f"Reply comment {authorperm} failed e : {str(e)}")
-            read_steem_failure_count.inc()
+            post_steem_failure_count.inc()
             logger.error(traceback.format_exc())
             return f"Reply comment {authorperm} failed e : {str(e)}"
 
