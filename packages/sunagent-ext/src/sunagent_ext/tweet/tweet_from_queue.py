@@ -1,133 +1,135 @@
-# tweet_from_queue.py
 import asyncio
 import json
 import logging
 from datetime import datetime
-from typing import Any, Callable, List
+from typing import Any, Callable, Dict, List, Optional
 
 import nats
-from apscheduler.executors.pool import ThreadPoolExecutor
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.date import DateTrigger
 from nats.aio.msg import Msg
-from nats.aio.subscription import Subscription
 
 logger = logging.getLogger(__name__)
 
 
 class TweetFromQueueContext:
-    """
-    1. 订阅 NATS subject，累积推文
-    2. APScheduler 每 10 秒强制 flush 一次（不管有没有消息）
-    3. 支持优雅关闭
-    """
-
     def __init__(
         self,
-        size: int,
-        user_ids: List[str],
+        *,
+        batch_size: int,
+        flush_seconds: float,
+        callback: Callable[[List[Dict[str, Any]]], Any],
         nats_url: str,
-        callback: Callable[[List[dict[str, Any]]], Any],
-        flush_seconds: int = 10,
+        subject: str,
+        user_ids: Optional[List[str]] = None,
     ):
-        self.size = size
-        self.user_ids = user_ids
-        self.nats_url = nats_url
+        if batch_size <= 0 or flush_seconds <= 0:
+            raise ValueError("batch_size / flush_seconds 必须为正")
+        self.batch_size = batch_size
         self.flush_seconds = flush_seconds
+        self.callback = callback
+        self.nats_url = nats_url
+        self.subject = subject
+        self.user_ids = set(user_ids) if user_ids else None
 
-        self._nc = None
-        self._buffer: List[dict[str, Any]] = []
-        self._callback: Callable[[List[dict[str, Any]]], Any] = callback
-        self._sub: Subscription | None = None
-        self._scheduler: AsyncIOScheduler = AsyncIOScheduler()  # type: ignore[no-any-unimported]
-        self._lock = asyncio.Lock()
-        self.flash_job_id = "flash"
+        self._nc: Optional[nats.NATS] = None  # type: ignore[name-defined]
+        self._sub = None
+        self._queue: asyncio.Queue[Dict[str, Any]] = asyncio.Queue()
+        self._stop_evt = asyncio.Event()
+        self._worker_task: Optional[asyncio.Task] = None  # type: ignore[type-arg]
 
     # -------------------- 生命周期 --------------------
-    async def start(self, subject: str) -> None:
-        # 1. 连接 NATS
-        self._nc = await nats.connect(self.nats_url)  # type: ignore[assignment]
-        self._sub = await self._nc.subscribe(subject, cb=self._nc_consume)  # type: ignore[attr-defined]
-        logger.info("Subscribed to <%s>, agent=%s", subject, self.user_ids)
+    async def start(self) -> None:
+        self._nc = await nats.connect(self.nats_url)
+        self._sub = await self._nc.subscribe(self.subject, cb=self._on_msg)  # type: ignore[assignment]
+        logger.info("Subscribed to <%s>, filter=%s", self.subject, self.user_ids)
+        # 启动单协程 worker
+        self._worker_task = asyncio.create_task(self._worker_loop())
 
-        # 2. 启动 APScheduler 定时 flush
-        self._scheduler.add_job(
-            self._flush,  # 定时执行的协程
-            trigger="interval",
-            id=self.flash_job_id,
-            seconds=self.flush_seconds,
-            max_instances=1,
-            next_run_time=datetime.now(),  # 立即执行一次
-        )
-        self._scheduler.start()
-
-    async def close(self) -> None:
-        """优雅关闭：停订阅 -> 停调度器 -> 刷剩余数据 -> 断 NATS"""
-        # 1. 停止订阅（不再接收新消息）
+    async def stop(self) -> None:
+        logger.info("Stopping AsyncBatchingQueue...")
+        self._stop_evt.set()
+        if self._worker_task:
+            await self._worker_task
         if self._sub:
             await self._sub.unsubscribe()
-            self._sub = None
-
-        # 2. 停止调度器（不再定时 flush）
-        if self._scheduler:
-            self._scheduler.shutdown(wait=False)
-
-        # 3. 刷剩余数据
-        async with self._lock:
-            await self._flush()
-
-        # 4. 断开 NATS
+        await self._flush()  # 刷剩余
         if self._nc:
             await self._nc.close()
-            logger.info("NATS connection closed")
+        logger.info("AsyncBatchingQueue stopped")
+
+    async def __aenter__(self):  # type: ignore[no-untyped-def]
+        await self.start()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):  # type: ignore[no-untyped-def]
+        await self.stop()
+
+    # -------------------- 公共入口 --------------------
+    async def add(self, item: Dict[str, Any]) -> None:
+        await self._queue.put(item)
 
     # -------------------- NATS 回调 --------------------
-    async def _nc_consume(self, msg: Msg) -> None:
+    async def _on_msg(self, msg: Msg) -> None:
         try:
             tweet = json.loads(msg.data.decode())
             tweet = self._fix_tweet_dict(tweet)
-            if tweet["author_id"] not in self.user_ids:
-                return
+            # if self.user_ids and tweet.get("author_id") not in self.user_ids:
+            #     return
         except Exception as e:
-            logger.exception("Bad message: %s", e)
+            logger.exception("Bad msg: %s", e)
             return
+        await self.add(tweet)
 
-        need_flush = False
-        async with self._lock:
-            self._buffer.append(tweet)
-            if len(self._buffer) >= self.size:
-                need_flush = True
+    # -------------------- 核心 worker：完全模仿 _worker_loop --------------------
+    async def _worker_loop(self) -> None:
+        """单协程：等第一条 -> 设 deadline -> 继续 get(timeout=剩余时间) -> 满批/超时刷"""
+        while not self._stop_evt.is_set():
+            batch: List[Dict[str, Any]] = []
+            deadline = None
 
-        # 锁外调用 flush，避免死锁
-        if need_flush:
-            await self._trigger_immediate_flush()
+            # 1. 阻塞等第一条
+            try:
+                first = await asyncio.wait_for(self._queue.get(), timeout=0.1)
+                batch.append(first)
+                deadline = asyncio.get_event_loop().time() + self.flush_seconds
+            except asyncio.TimeoutError:
+                continue
 
-    async def _trigger_immediate_flush(self) -> None:
-        """插一个立即任务，若已有未执行的则跳过/覆盖"""
-        self._scheduler.add_job(
-            self._flush,
-            trigger=DateTrigger(run_date=datetime.now()),
-            kwargs={"force": True},  # 标记为立即触发
-            id=self.flash_job_id,  # 与定时器同一 ID
-            replace_existing=True,  # 覆盖未执行的旧任务
-            max_instances=1,
-        )
+            # 2. 收集剩余
+            while len(batch) < self.batch_size and not self._stop_evt.is_set():
+                remaining = deadline - asyncio.get_event_loop().time()
+                if remaining <= 0:
+                    break
+                try:
+                    item = await asyncio.wait_for(self._queue.get(), timeout=remaining)
+                    batch.append(item)
+                except asyncio.TimeoutError:
+                    break
+
+            # 3. 处理
+            if batch:
+                try:
+                    await self.callback(batch)
+                except Exception as e:
+                    logger.exception("Callback error: %s", e)
+        # 4. 退出时刷剩余
+        await self._drain_remaining()
 
     async def _flush(self) -> None:
-        async with self._lock:
-            if not self._buffer:
-                return
-            to_send = self._buffer.copy()
-            self._buffer.clear()
-        logger.info("Flush %d tweets", len(to_send))
-        try:
-            await self._callback(to_send)
-        except Exception as e:
-            logger.exception("Callback error: %s", e)
+        """同步刷剩余（给 stop 用）"""
+        batch = []
+        while not self._queue.empty():
+            batch.append(self._queue.get_nowait())
+        if batch:
+            try:
+                await self.callback(batch)
+            except Exception as e:
+                logger.exception("Final callback error: %s", e)
 
-    # -------------------- 工具 --------------------
+    async def _drain_remaining(self) -> None:
+        await self._flush()
+
     @staticmethod
-    def _fix_tweet_dict(msg: dict[str, Any]) -> dict[str, Any]:
+    def _fix_tweet_dict(msg: Dict[str, Any]) -> Dict[str, Any]:
         fixed = msg.copy()
         for key in ("created_at", "updated_at"):
             if key in fixed and isinstance(fixed[key], str):
