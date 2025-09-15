@@ -6,7 +6,9 @@ from datetime import datetime
 from typing import Any, Callable, List
 
 import nats
+from apscheduler.executors.pool import ThreadPoolExecutor
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.date import DateTrigger
 from nats.aio.msg import Msg
 from nats.aio.subscription import Subscription
 
@@ -37,8 +39,9 @@ class TweetFromQueueContext:
         self._buffer: List[dict[str, Any]] = []
         self._callback: Callable[[List[dict[str, Any]]], Any] = callback
         self._sub: Subscription | None = None
-        self._scheduler: AsyncIOScheduler | None = None  # type: ignore[no-any-unimported]
+        self._scheduler: AsyncIOScheduler = AsyncIOScheduler()  # type: ignore[no-any-unimported]
         self._lock = asyncio.Lock()
+        self.flash_job_id = "flash"
 
     # -------------------- 生命周期 --------------------
     async def start(self, subject: str) -> None:
@@ -48,10 +51,10 @@ class TweetFromQueueContext:
         logger.info("Subscribed to <%s>, agent=%s", subject, self.user_ids)
 
         # 2. 启动 APScheduler 定时 flush
-        self._scheduler = AsyncIOScheduler()
         self._scheduler.add_job(
             self._flush,  # 定时执行的协程
             trigger="interval",
+            id=self.flash_job_id,
             seconds=self.flush_seconds,
             max_instances=1,
             next_run_time=datetime.now(),  # 立即执行一次
@@ -97,7 +100,18 @@ class TweetFromQueueContext:
 
         # 锁外调用 flush，避免死锁
         if need_flush:
-            await self._flush()
+            await self._trigger_immediate_flush()
+
+    async def _trigger_immediate_flush(self) -> None:
+        """插一个立即任务，若已有未执行的则跳过/覆盖"""
+        self._scheduler.add_job(
+            self._flush,
+            trigger=DateTrigger(run_date=datetime.now()),
+            kwargs={"force": True},  # 标记为立即触发
+            id=self.flash_job_id,  # 与定时器同一 ID
+            replace_existing=True,  # 覆盖未执行的旧任务
+            max_instances=1,
+        )
 
     async def _flush(self) -> None:
         async with self._lock:
@@ -105,8 +119,6 @@ class TweetFromQueueContext:
                 return
             to_send = self._buffer.copy()
             self._buffer.clear()
-
-        # 锁外执行回调，避免阻塞消息处理
         logger.info("Flush %d tweets", len(to_send))
         try:
             await self._callback(to_send)
