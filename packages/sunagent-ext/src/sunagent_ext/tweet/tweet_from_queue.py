@@ -89,24 +89,24 @@ class TweetFromQueueContext:
             logger.exception("Bad message: %s", e)
             return
 
+        need_flush = False
         async with self._lock:
             self._buffer.append(tweet)
-            # 如果满了也立即刷
             if len(self._buffer) >= self.size:
-                await self._flush()
+                need_flush = True
 
-    # -------------------- 真正刷新 --------------------
+        # 锁外调用 flush，避免死锁
+        if need_flush:
+            await self._flush()
+
     async def _flush(self) -> None:
-        # 1. 无数据直接返回（避免空跑）
-        if not self._buffer:
-            return
-
-        # 2. 锁内：拷贝 + 清空
         async with self._lock:
+            if not self._buffer:
+                return
             to_send = self._buffer.copy()
             self._buffer.clear()
 
-        # 3. 锁外：执行回调
+        # 锁外执行回调，避免阻塞消息处理
         logger.info("Flush %d tweets", len(to_send))
         try:
             await self._callback(to_send)
