@@ -100,7 +100,7 @@ class TimeoutSession(Session):
         cookies: _CookiesType = None,
         files: _FilesType = None,
         auth: _AuthType = None,
-        timeout: _TimeoutType = None,
+        timeout: _TimeoutType = None,  # type: ignore[override]
         allow_redirects: bool = True,
         proxies: _TextMapping | None = None,
         hooks: _HooksType = None,
