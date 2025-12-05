@@ -1,8 +1,8 @@
 import asyncio
 import logging
-import traceback
 import os
 import tempfile
+import traceback
 from typing import Any, Optional, Sequence, Union
 
 from autogen_agentchat.agents import BaseChatAgent
@@ -169,7 +169,7 @@ class StormAgent(BaseChatAgent):
     def _create_error_response(self) -> Response:
         return Response(
             chat_message=TextMessage(
-                content=f"system internal error, EARLY_TERMINATE",
+                content="system internal error, EARLY_TERMINATE",
                 source=self.name,
             )
         )
